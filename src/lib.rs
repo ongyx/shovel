@@ -1,4 +1,5 @@
 pub mod bucket;
+pub mod cli;
 pub mod config;
 pub mod manifest;
 pub mod shovel;

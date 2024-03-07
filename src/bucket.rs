@@ -3,7 +3,6 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use git2;
-use glob;
 use thiserror;
 
 use crate::manifest::Manifest;
@@ -71,22 +70,20 @@ impl Bucket {
     }
 
     /// Returns an iterator over all app manifests by name.
-    pub fn manifests(&self) -> impl Iterator<Item = String> {
-        let dir = self.dir().join(r"bucket\*.json");
+    pub fn manifests(&self) -> BucketResult<impl Iterator<Item = String>> {
+        let dir = self.dir().join("bucket");
+        let entries = fs::read_dir(dir)?;
 
-        // glob only accepts UTF-8 patterns, so the path must be converted.
-        let pattern = dir.to_str().unwrap();
-
-        // The only pattern in use is '*.json'.
-        let paths = glob::glob(pattern).unwrap();
-
-        paths
-            .filter_map(Result::ok)
-            .map(|p| osstr_to_string(p.file_stem().unwrap()))
+        Ok(entries
+            .filter_map(|r| r.ok())
+            .map(|e| e.path())
+            // Only yield files ending in .json.
+            .filter(|p| p.extension().map_or(false, |e| e == "json"))
+            .map(|p| osstr_to_string(p.file_stem().unwrap())))
     }
 
     /// Returns the path to an app manifest, or None if it does not exist.
-    pub fn get_manifest_path(&self, name: &str) -> Option<PathBuf> {
+    pub fn manifest_path(&self, name: &str) -> Option<PathBuf> {
         let mut path = self.dir().to_owned();
         path.push(format!(r"bucket\{}.json", name));
 
@@ -106,9 +103,9 @@ impl Bucket {
     /// # Errors
     ///
     /// If the manifest file does not exist, `BucketError::ManifestNotFound` is returned.
-    pub fn get_manifest(&self, name: &str) -> BucketResult<Manifest> {
+    pub fn manifest(&self, name: &str) -> BucketResult<Manifest> {
         let path = self
-            .get_manifest_path(name)
+            .manifest_path(name)
             .ok_or(BucketError::ManifestNotFound)?;
 
         let file = fs::File::open(path)?;

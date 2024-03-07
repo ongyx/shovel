@@ -74,7 +74,7 @@ impl Shovel {
     /// # Errors
     ///
     /// If the bucket does not exist, `ShovelError::BucketNotFound` is returned.
-    pub fn get_bucket(&mut self, name: &str) -> ShovelResult<&mut Bucket> {
+    pub fn bucket(&mut self, name: &str) -> ShovelResult<&mut Bucket> {
         match self.buckets.entry(name.to_owned()) {
             // Return the existing bucket.
             Entry::Occupied(o) => Ok(o.into_mut()),
@@ -100,8 +100,8 @@ impl Shovel {
             .buckets()?
             .map(|b| {
                 // NOTE: The bucket cannot be returned directly, since self cannot escape this closure
-                let bucket = self.get_bucket(&b)?;
-                let manifests = bucket.manifests();
+                let bucket = self.bucket(&b)?;
+                let manifests = bucket.manifests()?;
 
                 Ok((b, manifests))
             })
