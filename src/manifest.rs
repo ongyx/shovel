@@ -1,12 +1,14 @@
 use std::collections::HashMap;
 
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use serde_with::skip_serializing_none;
+use serde_with::{serde_as, skip_serializing_none, OneOrMany};
 use url::Url;
 
 /// Macro for generating a JSON enum.
 macro_rules! json_enum {
     ($item:item) => {
+        #[serde_as]
         #[skip_serializing_none]
         #[derive(Serialize, Deserialize, Debug)]
         #[serde(untagged)]
@@ -14,6 +16,7 @@ macro_rules! json_enum {
     };
 }
 
+/// Macro for generating a JSON enum as a map key.
 macro_rules! json_enum_key {
     ($item:item) => {
         #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Hash)]
@@ -24,17 +27,20 @@ macro_rules! json_enum_key {
 /// Macro for generating a JSON struct.
 macro_rules! json_struct {
     ($item:item) => {
+        #[serde_as]
         #[skip_serializing_none]
         #[derive(Serialize, Deserialize, Debug, Default)]
         $item
     };
 }
 
-json_enum! {
+json_struct! {
     /// A list represented as a single element by itself or multiple elements.
-    pub enum List<T> {
-        One(T),
-        Many(Vec<T>),
+    #[serde(transparent)]
+    pub struct List<T>
+    where T: DeserializeOwned {
+        #[serde_as(deserialize_as = "OneOrMany<_>")]
+        pub items: Vec<T>,
     }
 }
 
