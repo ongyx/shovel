@@ -2,12 +2,10 @@
 name = "shovel"
 version = "0.1.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+authors = ["Ong Yong Xin"]
+description = "A package manager for Windows, based off of Scoop."
 
 [dependencies]
-anyhow = "1.0.80"
-clap = { version = "4.5.1", features = ["derive"] }
 git2 = "0.18.2"
 home = "0.5.9"
 regex = "1.10.3"
@@ -17,3 +15,14 @@ serde_with = "3.6.1"
 thiserror = "1.0.57"
 url = { version = "2.5.0", features = ["serde"] }
 
+# CLI dependencies
+anyhow = { version = "1.0.80", optional = true }
+clap = { version = "4.5.1", features = ["derive"], optional = true }
+tabled = { version = "0.15.0", optional = true }
+
+[features]
+binary = ["anyhow", "clap", "tabled"]
+
+[[bin]]
+name = "shovel"
+required-features = ["binary"]

@@ -1,9 +1,9 @@
 use anyhow::{anyhow, Context};
 use regex;
+use shovel::Shovel;
 
-use crate::cli::bucket::BucketCommands;
-use crate::cli::run::Run;
-use crate::shovel::Shovel;
+use crate::bucket::BucketCommands;
+use crate::run::Run;
 
 #[derive(clap::Subcommand)]
 pub enum GlobalCommands {

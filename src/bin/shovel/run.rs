@@ -1,6 +1,6 @@
 use anyhow;
 
-use crate::shovel::Shovel;
+use shovel::Shovel;
 
 /// A runnable subcommand.
 pub trait Run {

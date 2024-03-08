@@ -69,6 +69,13 @@ impl Bucket {
         name.unwrap_or("").to_owned()
     }
 
+    /// Returns the bucket origin, i.e., the URL it was cloned from.
+    pub fn origin(&self) -> BucketResult<String> {
+        let origin = self.repo.find_remote("origin")?;
+
+        Ok(origin.url().unwrap_or("").to_owned())
+    }
+
     /// Returns an iterator over all app manifests by name.
     pub fn manifests(&self) -> BucketResult<impl Iterator<Item = String>> {
         let dir = self.dir().join("bucket");

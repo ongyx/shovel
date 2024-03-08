@@ -1,18 +1,23 @@
+mod bucket;
+mod global;
+mod run;
+
 use std::{fs, io};
 
 use anyhow::Context;
 use clap;
 use clap::Parser;
-
-use shovel::cli::{Commands, Run};
 use shovel::{Config, Shovel};
+
+use global::GlobalCommands;
+use run::Run;
 
 #[derive(clap::Parser)]
 #[command(version, about)]
 #[command(propagate_version = true)]
 struct Args {
     #[command(subcommand)]
-    commands: Commands,
+    commands: GlobalCommands,
 
     /// Specify a configuration file
     #[arg(short, long, global = true)]

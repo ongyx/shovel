@@ -1,8 +1,8 @@
 use anyhow::Context;
 use clap;
+use shovel::Shovel;
 
-use crate::cli::run::Run;
-use crate::shovel::Shovel;
+use crate::run::Run;
 
 #[derive(clap::Subcommand)]
 pub enum BucketCommands {
