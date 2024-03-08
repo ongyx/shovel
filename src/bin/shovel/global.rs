@@ -44,19 +44,10 @@ impl AppInfo {
                 let bins: Vec<String> = list
                     .items
                     .iter()
-                    .filter_map(|b| match b {
-                        Bin::Path(s) => Some(s.clone()),
-                        Bin::Shim(v) => {
-                            // Shim must contain [program, alias, args...] where arguments are optional.
-                            if v.len() >= 2 {
-                                let program = &v[0];
-                                let alias = &v[1];
-                                let args = &v[2..];
-
-                                Some(format!("{} => {} {}", alias, program, args.join(" ")))
-                            } else {
-                                None
-                            }
+                    .map(|b| match b {
+                        Bin::Path(p) => p.clone(),
+                        Bin::Shim(s) => {
+                            format!("{} => {} {}", s.alias(), s.executable(), s.args().join(" "))
                         }
                     })
                     .collect();

@@ -154,14 +154,90 @@ json_struct! {
     }
 }
 
-/// A desktop shortcut in the Start Menu.
-///
-/// The vec must have 2-4 elements:
-/// * The path to the executable, relative to the install directory.
-/// * The name of the shortcut.
-/// * The start parameters to pass to the executable. (Optional)
-/// * The path to the shortcut icon. (Optional)
-pub type Shortcut = Vec<String>;
+json_struct! {
+    /// A desktop shortcut in the Start Menu.
+    ///
+    /// The vec must have 2-4 elements:
+    /// * The path to the executable, relative to the install directory.
+    /// * The name of the shortcut.
+    /// * The start parameters to pass to the executable. (Optional)
+    /// * The path to the shortcut icon. (Optional)
+    #[serde(try_from = "Vec<String>")]
+    pub struct Shortcut(Vec<String>);
+}
+
+impl Shortcut {
+    /// Returns the path to the shortcut executable.
+    pub fn executable(&self) -> &String {
+        &self.0[0]
+    }
+
+    /// Returns the name of the shortcut.
+    pub fn name(&self) -> &String {
+        &self.0[1]
+    }
+
+    /// Returns the parameters to pass to the executable.
+    pub fn parameters(&self) -> Option<&String> {
+        self.0.get(2)
+    }
+
+    /// Returns the shortcut icon.
+    pub fn icon(&self) -> Option<&String> {
+        self.0.get(3)
+    }
+}
+
+impl TryFrom<Vec<String>> for Shortcut {
+    type Error = &'static str;
+
+    fn try_from(value: Vec<String>) -> Result<Self, Self::Error> {
+        match value.len() {
+            2..=4 => Ok(Self(value)),
+            _ => Err("Shortcut must consist of [executable, name, (parameters), (icon)]"),
+        }
+    }
+}
+
+json_struct! {
+    /// A shim for an executable.
+    ///
+    /// The vec must have 2 or more elements:
+    /// * The path to the executable, relative to the install directory.
+    /// * The name of the shim.
+    /// * Arguments to pass to the executable. (Optional)
+    #[serde(try_from = "Vec<String>")]
+    pub struct Shim(Vec<String>);
+}
+
+impl Shim {
+    /// Returns the executable to be shimmed.
+    pub fn executable(&self) -> &String {
+        &self.0[0]
+    }
+
+    /// Returns the alias to shim as.
+    pub fn alias(&self) -> &String {
+        &self.0[1]
+    }
+
+    /// Returns the arguments to pass to the executable.
+    pub fn args(&self) -> &[String] {
+        &self.0[2..]
+    }
+}
+
+impl TryFrom<Vec<String>> for Shim {
+    type Error = &'static str;
+
+    fn try_from(value: Vec<String>) -> Result<Self, Self::Error> {
+        if value.len() >= 2 {
+            Ok(Self(value))
+        } else {
+            Err("Shim must consist of [executable, alias, args...]")
+        }
+    }
+}
 
 json_enum! {
     /// An executable to add to the user's path.
@@ -170,7 +246,7 @@ json_enum! {
         Path(String),
 
         /// A shim consisting of a path to an executable, and arguments to pass to the executable.
-        Shim(Vec<String>),
+        Shim(Shim),
     }
 }
 
