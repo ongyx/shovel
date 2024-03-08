@@ -76,6 +76,14 @@ impl Bucket {
         Ok(origin.url().unwrap_or("").to_owned())
     }
 
+    /// Returns the UNIX timestamp in seconds for the last commit in the bucket.
+    pub fn timestamp(&self) -> BucketResult<i64> {
+        let head = self.repo.head()?;
+        let commit = head.peel_to_commit()?;
+
+        Ok(commit.time().seconds())
+    }
+
     /// Returns an iterator over all app manifests by name.
     pub fn manifests(&self) -> BucketResult<impl Iterator<Item = String>> {
         let dir = self.dir().join("bucket");

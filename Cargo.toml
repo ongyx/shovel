@@ -19,9 +19,10 @@ url = { version = "2.5.0", features = ["serde"] }
 anyhow = { version = "1.0.80", optional = true }
 clap = { version = "4.5.1", features = ["derive"], optional = true }
 tabled = { version = "0.15.0", optional = true }
+chrono = { version = "0.4.35", optional = true }
 
 [features]
-binary = ["anyhow", "clap", "tabled"]
+binary = ["dep:anyhow", "dep:clap", "dep:tabled", "dep:chrono"]
 
 [[bin]]
 name = "shovel"
