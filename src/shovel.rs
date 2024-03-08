@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::io;
 use std::iter;
+use std::path::PathBuf;
 
 use thiserror;
 
@@ -17,6 +18,10 @@ pub enum ShovelError {
     /// A bucket does not exist.
     #[error("Bucket not found")]
     BucketNotFound,
+
+    /// A bucket exists.
+    #[error("Bucket already exists")]
+    BucketExists,
 
     /// A bucket-specific error.
     #[error(transparent)]
@@ -65,6 +70,18 @@ impl Shovel {
             .map(|p| osstr_to_string(p.file_name().unwrap())))
     }
 
+    /// Returns the path to a bucket, or None if it does not exist.
+    pub fn bucket_path(&self, name: &str) -> Option<PathBuf> {
+        let mut path = self.config.bucket_dir();
+        path.push(name);
+
+        if path.exists() {
+            Some(path)
+        } else {
+            None
+        }
+    }
+
     /// Opens and returns a bucket.
     ///
     /// # Arguments
@@ -75,20 +92,65 @@ impl Shovel {
     ///
     /// If the bucket does not exist, `ShovelError::BucketNotFound` is returned.
     pub fn bucket(&mut self, name: &str) -> ShovelResult<&mut Bucket> {
+        // Make sure the bucket still exists.
+        let dir = self.bucket_path(name).ok_or(ShovelError::BucketNotFound)?;
+
         match self.buckets.entry(name.to_owned()) {
             // Return the existing bucket.
             Entry::Occupied(o) => Ok(o.into_mut()),
             // Open a new bucket.
-            Entry::Vacant(v) => {
-                let mut dir = self.config.bucket_dir();
-                dir.push(name);
+            Entry::Vacant(v) => Ok(v.insert(Bucket::open(dir)?)),
+        }
+    }
 
-                if !dir.exists() {
-                    return Err(ShovelError::BucketNotFound);
-                }
+    /// Adds a bucket.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The name to add the remote bucket as.
+    /// * `url` - The Git URL of the remote bucket.
+    ///
+    /// # Errors
+    ///
+    /// If the bucket name already exists, `ShovelError::BucketExists` is returned.
+    pub fn add_bucket(&mut self, name: &str, url: &str) -> ShovelResult<&mut Bucket> {
+        // Bail if the bucket already exists.
+        if self.bucket_path(name).is_some() {
+            return Err(ShovelError::BucketExists);
+        }
 
-                Ok(v.insert(Bucket::open(dir)?))
+        let mut dir = self.config.bucket_dir();
+        dir.push(name);
+
+        let bucket = Bucket::clone(url, dir)?;
+
+        // It is possible for a bucket to be removed from the filesystem while the handle persists.
+        // Just in case, remove the previous entry (if any) to guarantee .or_insert will insert the bucket.
+        self.buckets.remove(name);
+
+        Ok(self.buckets.entry(name.to_owned()).or_insert(bucket))
+    }
+
+    /// Removes a bucket.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The name of the bucket.
+    ///
+    /// # Errors
+    ///
+    /// If the bucket does not exist, `ShovelError::BucketNotFound` is returned.
+    pub fn remove_bucket(&mut self, name: &str) -> ShovelResult<()> {
+        match self.bucket_path(name) {
+            Some(dir) => {
+                // Remove the handle - it will be invalid after the bucket directory is deleted.
+                self.buckets.remove(name);
+
+                fs::remove_dir_all(dir)?;
+
+                Ok(())
             }
+            None => Err(ShovelError::BucketNotFound),
         }
     }
 

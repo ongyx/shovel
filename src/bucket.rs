@@ -56,6 +56,22 @@ impl Bucket {
         Ok(Bucket { dir, repo })
     }
 
+    /// Clone a remote bucket.
+    ///
+    /// # Arguments
+    ///
+    /// * `url` - The Git URL of the remote bucket.
+    /// * `dir` - The path to clone the remote bucket to. It must not exist yet.
+    pub fn clone<P>(url: &str, dir: P) -> BucketResult<Self>
+    where
+        P: AsRef<Path>,
+    {
+        let dir = dir.as_ref().to_owned();
+        let repo = git2::Repository::clone(url, &dir)?;
+
+        Ok(Bucket { dir, repo })
+    }
+
     /// Returns the bucket directory.
     pub fn dir(&self) -> &Path {
         &self.dir

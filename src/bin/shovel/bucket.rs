@@ -10,6 +10,13 @@ use crate::util::tableify;
 
 #[derive(Subcommand)]
 pub enum BucketCommands {
+    /// Add a bucket
+    Add(AddCommand),
+
+    /// Remove a bucket
+    #[clap(visible_alias("rm"))]
+    Remove(RemoveCommand),
+
     /// List all buckets
     List(ListCommand),
 
@@ -20,9 +27,50 @@ pub enum BucketCommands {
 impl Run for BucketCommands {
     fn run(&self, shovel: &mut Shovel) -> Result<()> {
         match self {
+            Self::Add(cmd) => cmd.run(shovel),
+            Self::Remove(cmd) => cmd.run(shovel),
             Self::List(cmd) => cmd.run(shovel),
             Self::Verify(cmd) => cmd.run(shovel),
         }
+    }
+}
+
+#[derive(Args)]
+pub struct AddCommand {
+    /// The new bucket's name.
+    name: String,
+
+    /// The new bucket's URL.
+    url: String,
+}
+
+impl Run for AddCommand {
+    fn run(&self, shovel: &mut Shovel) -> anyhow::Result<()> {
+        shovel
+            .add_bucket(&self.name, &self.url)
+            .with_context(|| format!("Failed to add bucket {}", self.name))?;
+
+        println!("Added bucket {} from {}.", self.name, self.url);
+
+        Ok(())
+    }
+}
+
+#[derive(Args)]
+pub struct RemoveCommand {
+    /// The existing bucket's name.
+    name: String,
+}
+
+impl Run for RemoveCommand {
+    fn run(&self, shovel: &mut Shovel) -> anyhow::Result<()> {
+        shovel
+            .remove_bucket(&self.name)
+            .with_context(|| format!("Failed to remove bucket {}", self.name))?;
+
+        println!("Removed bucket {}.", self.name);
+
+        Ok(())
     }
 }
 
