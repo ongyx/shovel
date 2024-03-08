@@ -22,8 +22,8 @@ tabled = { version = "0.15.0", optional = true }
 chrono = { version = "0.4.35", optional = true }
 
 [features]
-binary = ["dep:anyhow", "dep:clap", "dep:tabled", "dep:chrono"]
+bin = ["dep:anyhow", "dep:clap", "dep:tabled", "dep:chrono"]
 
 [[bin]]
 name = "shovel"
-required-features = ["binary"]
+required-features = ["bin"]

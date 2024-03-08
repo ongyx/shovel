@@ -1,9 +1,12 @@
 use anyhow::{anyhow, Context};
 use regex;
-use shovel::Shovel;
+use shovel::manifest::Bin;
+use shovel::{Manifest, Shovel};
+use tabled::Tabled;
 
 use crate::bucket::BucketCommands;
 use crate::run::Run;
+use crate::util::tableify;
 
 #[derive(clap::Subcommand)]
 pub enum GlobalCommands {
@@ -24,6 +27,54 @@ impl Run for GlobalCommands {
     }
 }
 
+#[derive(Tabled)]
+#[tabled(rename_all = "pascal")]
+struct AppInfo {
+    name: String,
+    version: String,
+    bucket: String,
+    binaries: String,
+}
+
+impl AppInfo {
+    fn new(bucket: String, name: String, manifest: &Manifest) -> Self {
+        let version = manifest.version.clone();
+        let binaries = match &manifest.common.bin {
+            Some(list) => {
+                let bins: Vec<String> = list
+                    .items
+                    .iter()
+                    .filter_map(|b| match b {
+                        Bin::Path(s) => Some(s.clone()),
+                        Bin::Shim(v) => {
+                            // Shim must contain [program, alias, args...] where arguments are optional.
+                            if v.len() >= 2 {
+                                let program = &v[0];
+                                let alias = &v[1];
+                                let args = &v[2..];
+
+                                Some(format!("{} => {} {}", alias, program, args.join(" ")))
+                            } else {
+                                None
+                            }
+                        }
+                    })
+                    .collect();
+
+                bins.join(", ")
+            }
+            None => "".to_owned(),
+        };
+
+        AppInfo {
+            name,
+            version,
+            bucket,
+            binaries,
+        }
+    }
+}
+
 #[derive(clap::Args)]
 pub struct SearchCommand {
     /// The search pattern as a regex.
@@ -38,8 +89,8 @@ impl Run for SearchCommand {
     fn run(&self, shovel: &mut Shovel) -> anyhow::Result<()> {
         let regex = regex::Regex::new(&self.pattern).context("Invalid pattern")?;
 
-        let mut manifests = shovel
-            .search(|b, m| {
+        let manifests: anyhow::Result<Vec<_>> = shovel
+            .search(|b, a| {
                 // If bucket is not None, check the bucket name.
                 if let Some(bk) = &self.bucket {
                     if b != bk {
@@ -47,19 +98,26 @@ impl Run for SearchCommand {
                     }
                 }
 
-                regex.is_match(m)
+                regex.is_match(a)
             })
             .context("Search failed")?
-            .peekable();
+            .map(|(b, a)| {
+                let bucket = shovel.bucket(&b)?;
+                let manifest = bucket.manifest(&a)?;
 
-        if manifests.peek().is_none() {
-            return Err(anyhow!("No app(s) found."));
+                Ok(AppInfo::new(b, a, &manifest))
+            })
+            .collect();
+
+        let manifests = manifests?;
+
+        match manifests.len() {
+            0 => Err(anyhow!("No app(s) found.")),
+            _ => {
+                println!("\n{}\n", tableify(manifests));
+
+                Ok(())
+            }
         }
-
-        for (bucket, manifest) in manifests {
-            println!("{}/{}", bucket, manifest);
-        }
-
-        Ok(())
     }
 }
