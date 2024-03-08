@@ -18,8 +18,10 @@ url = { version = "2.5.0", features = ["serde"] }
 # CLI dependencies
 anyhow = { version = "1.0.80", optional = true }
 clap = { version = "4.5.1", features = ["derive"], optional = true }
-tabled = { version = "0.15.0", optional = true }
+tabled = { version = "0.15.0", features = ["ansi"], optional = true }
 chrono = { version = "0.4.35", optional = true }
+phf = { version = "0.11.2", features = ["macros"] }
+colored = "2.1.0"
 
 [features]
 bin = ["dep:anyhow", "dep:clap", "dep:tabled", "dep:chrono"]

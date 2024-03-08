@@ -1,12 +1,34 @@
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Local};
 use clap::{Args, Subcommand};
+use colored::Colorize;
+use phf::phf_map;
 use shovel::{Bucket, Shovel, ShovelResult};
 
 use tabled::Tabled;
 
 use crate::run::Run;
 use crate::util::tableify;
+
+/// Map of known bucket names to their URLs.
+/// Derived from https://github.com/ScoopInstaller/Scoop/blob/master/buckets.json
+static KNOWN_BUCKETS: phf::Map<&'static str, &'static str> = phf_map! {
+    "main" => "https://github.com/ScoopInstaller/Main",
+    "extras" => "https://github.com/ScoopInstaller/Extras",
+    "versions" => "https://github.com/ScoopInstaller/Versions",
+    "nirsoft" => "https://github.com/kodybrown/scoop-nirsoft",
+    "sysinternals" => "https://github.com/niheaven/scoop-sysinternals",
+    "php" => "https://github.com/ScoopInstaller/PHP",
+    "nerd-fonts" => "https://github.com/matthewjberger/scoop-nerd-fonts",
+    "nonportable" => "https://github.com/ScoopInstaller/Nonportable",
+    "java" => "https://github.com/ScoopInstaller/Java",
+    "games" => "https://github.com/Calinou/scoop-games"
+};
+
+/// Returns the URL of the known bucket by name.
+fn known_bucket(name: &str) -> Option<&'static str> {
+    KNOWN_BUCKETS.get(name).map(|u| *u)
+}
 
 #[derive(Subcommand)]
 pub enum BucketCommands {
@@ -20,6 +42,9 @@ pub enum BucketCommands {
     /// List all buckets
     List(ListCommand),
 
+    /// List all known buckets
+    Known(KnownCommand),
+
     /// Verify apps in a bucket
     Verify(VerifyCommand),
 }
@@ -30,6 +55,7 @@ impl Run for BucketCommands {
             Self::Add(cmd) => cmd.run(shovel),
             Self::Remove(cmd) => cmd.run(shovel),
             Self::List(cmd) => cmd.run(shovel),
+            Self::Known(cmd) => cmd.run(shovel),
             Self::Verify(cmd) => cmd.run(shovel),
         }
     }
@@ -37,22 +63,34 @@ impl Run for BucketCommands {
 
 #[derive(Args)]
 pub struct AddCommand {
-    /// The new bucket's name.
+    /// The bucket name.
     name: String,
 
-    /// The new bucket's URL.
-    url: String,
+    /// The bucket URL.
+    /// Required if the bucket name is not known - run `shovel bucket known` for details.
+    url: Option<String>,
 }
 
 impl Run for AddCommand {
     fn run(&self, shovel: &mut Shovel) -> anyhow::Result<()> {
-        shovel
-            .add_bucket(&self.name, &self.url)
-            .with_context(|| format!("Failed to add bucket {}", self.name))?;
+        let url = self
+            .url
+            .as_ref()
+            .map(|u| u.as_str())
+            .or_else(|| known_bucket(&self.name));
 
-        println!("Added bucket {} from {}.", self.name, self.url);
+        match url {
+            Some(url) => {
+                shovel
+                    .add_bucket(&self.name, &url)
+                    .with_context(|| format!("Failed to add bucket {}", self.name))?;
 
-        Ok(())
+                println!("Added bucket {} from {}", self.name.bold(), url.green());
+
+                Ok(())
+            }
+            None => Err(anyhow!("URL was not specified")),
+        }
     }
 }
 
@@ -68,7 +106,7 @@ impl Run for RemoveCommand {
             .remove_bucket(&self.name)
             .with_context(|| format!("Failed to remove bucket {}", self.name))?;
 
-        println!("Removed bucket {}.", self.name);
+        println!("Removed bucket {}", self.name.bold());
 
         Ok(())
     }
@@ -110,12 +148,34 @@ impl ListCommand {}
 
 impl Run for ListCommand {
     fn run(&self, shovel: &mut Shovel) -> Result<()> {
-        let infos: ShovelResult<Vec<_>> = shovel
+        let info: ShovelResult<Vec<_>> = shovel
             .buckets()?
             .map(|n| shovel.bucket(&n).and_then(|b| BucketInfo::new(b)))
             .collect();
 
-        println!("\n{}\n", tableify(infos?));
+        println!("\n{}\n", tableify(info?));
+
+        Ok(())
+    }
+}
+
+#[derive(Tabled)]
+#[tabled(rename_all = "pascal")]
+struct KnownInfo {
+    name: &'static str,
+    source: &'static str,
+}
+
+#[derive(Args)]
+pub struct KnownCommand {}
+
+impl Run for KnownCommand {
+    fn run(&self, _shovel: &mut Shovel) -> anyhow::Result<()> {
+        let known = KNOWN_BUCKETS
+            .into_iter()
+            .map(|(name, source)| KnownInfo { name, source });
+
+        println!("\n{}\n", tableify(known));
 
         Ok(())
     }
@@ -123,13 +183,13 @@ impl Run for ListCommand {
 
 #[derive(Args)]
 pub struct VerifyCommand {
-    /// The bucket to verify apps for.
-    bucket: String,
+    /// The bucket to verify apps for. If not specified, all buckets are verified.
+    bucket: Option<String>,
 }
 
-impl Run for VerifyCommand {
-    fn run(&self, shovel: &mut Shovel) -> Result<()> {
-        let bucket = shovel.bucket(&self.bucket)?;
+impl VerifyCommand {
+    fn verify(&self, shovel: &mut Shovel, bucket_name: &str) -> Result<i32> {
+        let bucket = shovel.bucket(bucket_name)?;
 
         let mut count = 0;
 
@@ -147,7 +207,34 @@ impl Run for VerifyCommand {
             count += 1;
         }
 
-        println!("Ok: {} manifests parsed", count);
+        Ok(count)
+    }
+}
+
+impl Run for VerifyCommand {
+    fn run(&self, shovel: &mut Shovel) -> Result<()> {
+        match &self.bucket {
+            Some(name) => {
+                let count = self.verify(shovel, name)?;
+
+                println!(
+                    "{}: parsed {} manifests",
+                    name.bold(),
+                    count.to_string().green()
+                );
+            }
+            None => {
+                for name in shovel.buckets()? {
+                    let count = self.verify(shovel, &name)?;
+
+                    println!(
+                        "{}: parsed {} manifests",
+                        name.bold(),
+                        count.to_string().green()
+                    );
+                }
+            }
+        }
 
         Ok(())
     }
