@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Context};
 use regex;
-use shovel::app::manifest::Bin;
+use shovel::app::manifest::{Bin, Bins};
 use shovel::{Manifest, Shovel};
 use tabled::Tabled;
 
@@ -40,20 +40,26 @@ impl AppInfo {
     fn new(bucket: String, name: String, manifest: &Manifest) -> Self {
         let version = manifest.version.clone();
         let binaries = match &manifest.common.bin {
-            Some(list) => {
-                let bins: Vec<String> = list
-                    .items
-                    .iter()
-                    .map(|b| match b {
-                        Bin::Path(p) => p.clone(),
-                        Bin::Shim(s) => {
-                            format!("{} => {} {}", s.name, s.executable, s.arguments.join(" "))
-                        }
-                    })
-                    .collect();
+            Some(bins) => match bins {
+                Bins::One(p) => p.clone(),
+                Bins::Many(ps) => {
+                    let bins: Vec<String> = ps
+                        .iter()
+                        .map(|b| match b {
+                            Bin::Path(p) => p.clone(),
+                            Bin::Shim(s) => {
+                                let cmd = [vec![s.executable.clone()], s.arguments.clone()]
+                                    .concat()
+                                    .join(" ");
 
-                bins.join(", ")
-            }
+                                format!("{} => {}", s.name, cmd)
+                            }
+                        })
+                        .collect();
+
+                    bins.join(" | ")
+                }
+            },
             None => "".to_owned(),
         };
 

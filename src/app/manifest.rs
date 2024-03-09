@@ -9,7 +9,7 @@ macro_rules! json_enum {
     ($item:item) => {
         #[serde_as]
         #[skip_serializing_none]
-        #[derive(Serialize, Deserialize, Debug)]
+        #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
         #[serde(untagged)]
         $item
     };
@@ -28,7 +28,7 @@ macro_rules! json_struct {
     ($item:item) => {
         #[serde_as]
         #[skip_serializing_none]
-        #[derive(Serialize, Deserialize, Debug, Default)]
+        #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Default)]
         $item
     };
 }
@@ -37,8 +37,8 @@ json_struct! {
     /// A list represented as a single element by itself or multiple elements.
     #[serde(transparent)]
     pub struct List<T>
-    where T: DeserializeOwned {
-        #[serde_as(deserialize_as = "OneOrMany<_>")]
+    where T: Serialize + DeserializeOwned {
+        #[serde_as(as = "OneOrMany<_>")]
         pub items: Vec<T>,
     }
 }
@@ -256,6 +256,20 @@ json_enum! {
     }
 }
 
+// NOTE: We cannot use List<Bin> directly as the JSON array decodes to Shim instead.
+// This is reflected in the test `deserialize_bin`.
+
+json_enum! {
+    /// One or more executables to add to the user's path.
+    pub enum Bins {
+        /// A path to a single executable.
+        One(String),
+
+        /// Multiple executables.
+        Many(Vec<Bin>),
+    }
+}
+
 json_enum_key! {
     /// The mode to use when extracting hashes.
     pub enum HashExtractionMode {
@@ -347,7 +361,7 @@ json_struct! {
     /// A subset of an app's manifest that can be customized per architecture in an autoupdate template.
     pub struct AutoupdateArch {
         /// A list of executables to add to the user's path.
-        pub bin: Option<List<Bin>>,
+        pub bin: Option<Bins>,
 
         /// A list of directories to add to the user's path, relative to the install directory.
         pub env_add_path: Option<List<String>>,
@@ -402,7 +416,7 @@ json_struct! {
     /// A subset of an app's manifest that can be customized per architecture.
     pub struct ManifestArch {
         /// A list of executables to add to the user's path.
-        pub bin: Option<List<Bin>>,
+        pub bin: Option<Bins>,
 
         /// A regular expression or JsonPath to extract the app's version from the app's URL.
         pub checkver: Option<Checkver>,
@@ -609,5 +623,26 @@ mod tests {
             to_string(&shim_with_args).unwrap(),
             r#"["helix.exe","hx","--config","~\\scoop\\persist\\helix\\config.toml"]"#
         )
+    }
+
+    #[test]
+    fn deserialize_bins() {
+        let from_string = serde_json::from_str::<Bins>;
+
+        let bins = from_string(
+            r#"
+            ["foo", "bar", "baz"]
+            "#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            bins,
+            Bins::Many(vec![
+                Bin::Path("foo".to_owned()),
+                Bin::Path("bar".to_owned()),
+                Bin::Path("baz".to_owned())
+            ])
+        );
     }
 }

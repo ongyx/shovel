@@ -22,6 +22,7 @@ tabled = { version = "0.15.0", features = ["ansi"], optional = true }
 chrono = { version = "0.4.35", optional = true }
 phf = { version = "0.11.2", features = ["macros"] }
 colored = "2.1.0"
+terminal_size = "0.3.0"
 
 [features]
 bin = ["dep:anyhow", "dep:clap", "dep:tabled", "dep:chrono"]
