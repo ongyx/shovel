@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none, OneOrMany};
-use url::Url;
 
 /// Macro for generating a JSON enum.
 macro_rules! json_enum {
@@ -73,10 +72,10 @@ json_enum! {
         /// An extended pattern.
         Extended {
             /// The Github URL to check instead of the homepage.
-            github: Option<Url>,
+            github: Option<String>,
 
             /// The URL to check instead of the homepage.
-            url: Option<Url>,
+            url: Option<String>,
 
             /// The regular expression to check with.
             /// If `jsonpath`, `xpath`, or `script` are not None, the regex is used on their output.
@@ -157,85 +156,92 @@ json_struct! {
 json_struct! {
     /// A desktop shortcut in the Start Menu.
     ///
-    /// The vec must have 2-4 elements:
-    /// * The path to the executable, relative to the install directory.
-    /// * The name of the shortcut.
-    /// * The start parameters to pass to the executable. (Optional)
-    /// * The path to the shortcut icon. (Optional)
+    /// This is represented as a JSON array of `[executable, name, (parameters), (icon)]`.
+    #[derive(Clone)]
     #[serde(try_from = "Vec<String>")]
-    pub struct Shortcut(Vec<String>);
-}
-
-impl Shortcut {
-    /// Returns the path to the shortcut executable.
-    pub fn executable(&self) -> &String {
-        &self.0[0]
-    }
-
-    /// Returns the name of the shortcut.
-    pub fn name(&self) -> &String {
-        &self.0[1]
-    }
-
-    /// Returns the parameters to pass to the executable.
-    pub fn parameters(&self) -> Option<&String> {
-        self.0.get(2)
-    }
-
-    /// Returns the shortcut icon.
-    pub fn icon(&self) -> Option<&String> {
-        self.0.get(3)
+    #[serde(into = "Vec<String>")]
+    pub struct Shortcut {
+        /// The path to the executable, relative to the install directory.
+        pub executable: String,
+        /// The name of the shortcut.
+        pub name: String,
+        /// The arguments to pass to the executable.
+        pub arguments: Option<String>,
+        /// The path to the shortcut icon.
+        pub icon: Option<String>,
     }
 }
 
 impl TryFrom<Vec<String>> for Shortcut {
     type Error = &'static str;
 
-    fn try_from(value: Vec<String>) -> Result<Self, Self::Error> {
-        match value.len() {
-            2..=4 => Ok(Self(value)),
+    fn try_from(vec: Vec<String>) -> Result<Self, Self::Error> {
+        match vec.len() {
+            2..=4 => Ok(Self {
+                executable: vec[0].clone(),
+                name: vec[1].clone(),
+                arguments: vec.get(2).cloned(),
+                icon: vec.get(3).cloned(),
+            }),
             _ => Err("Shortcut must consist of [executable, name, (parameters), (icon)]"),
         }
     }
 }
 
-json_struct! {
-    /// A shim for an executable.
-    ///
-    /// The vec must have 2 or more elements:
-    /// * The path to the executable, relative to the install directory.
-    /// * The name of the shim.
-    /// * Arguments to pass to the executable. (Optional)
-    #[serde(try_from = "Vec<String>")]
-    pub struct Shim(Vec<String>);
+impl From<Shortcut> for Vec<String> {
+    fn from(shortcut: Shortcut) -> Self {
+        let mut vec = vec![shortcut.executable, shortcut.name];
+
+        if let Some(parameters) = shortcut.arguments {
+            vec.push(parameters);
+        }
+
+        if let Some(icon) = shortcut.icon {
+            // Ensure parameters are specified as empty.
+            vec.resize(3, "".to_owned());
+            vec.push(icon)
+        }
+
+        vec
+    }
 }
 
-impl Shim {
-    /// Returns the executable to be shimmed.
-    pub fn executable(&self) -> &String {
-        &self.0[0]
-    }
-
-    /// Returns the alias to shim as.
-    pub fn alias(&self) -> &String {
-        &self.0[1]
-    }
-
-    /// Returns the arguments to pass to the executable.
-    pub fn args(&self) -> &[String] {
-        &self.0[2..]
+json_struct! {
+    /// An aliased shim for an executable.
+    ///
+    /// The vec must have 2 or more elements:
+    #[derive(Clone)]
+    #[serde(try_from = "Vec<String>")]
+    #[serde(into = "Vec<String>")]
+    pub struct Shim {
+        /// The path to the executable, relative to the install directory.
+        pub executable: String,
+        /// The name of the shim.
+        pub name: String,
+        /// Arguments to pass to the executable. This may be empty.
+        pub arguments: Vec<String>,
     }
 }
 
 impl TryFrom<Vec<String>> for Shim {
     type Error = &'static str;
 
-    fn try_from(value: Vec<String>) -> Result<Self, Self::Error> {
-        if value.len() >= 2 {
-            Ok(Self(value))
+    fn try_from(vec: Vec<String>) -> Result<Self, Self::Error> {
+        if vec.len() >= 2 {
+            Ok(Self {
+                executable: vec[0].clone(),
+                name: vec[1].clone(),
+                arguments: vec[2..].to_vec(),
+            })
         } else {
-            Err("Shim must consist of [executable, alias, args...]")
+            Err("Shim must consist of [executable, alias, (args...)]")
         }
+    }
+}
+
+impl From<Shim> for Vec<String> {
+    fn from(shim: Shim) -> Self {
+        [vec![shim.executable, shim.name], shim.arguments].concat()
     }
 }
 
@@ -439,7 +445,7 @@ json_struct! {
         /// A list of URLs to download.
         /// If a URL contains a fragment starting with '/', the download is renamed,
         /// i.e., https://example.test/app.exe#/app.zip -> app.zip
-        pub url: Option<List<Url>>,
+        pub url: Option<List<String>>,
     }
 }
 
@@ -488,5 +494,120 @@ json_struct! {
         /// Common fields.
         #[serde(flatten)]
         pub common: ManifestArch,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json;
+
+    use super::*;
+
+    #[test]
+    fn deserialize_shortcut() {
+        let from_str = serde_json::from_str::<Shortcut>;
+
+        let shortcut = from_str(
+            r#"
+            ["program.exe", "shortcut_to_program", "--params --to --program", "icon.ico"]
+            "#,
+        )
+        .unwrap();
+
+        assert_eq!(shortcut.executable, "program.exe");
+        assert_eq!(shortcut.name, "shortcut_to_program");
+        assert_eq!(shortcut.arguments.unwrap(), "--params --to --program");
+        assert_eq!(shortcut.icon.unwrap(), "icon.ico");
+
+        assert!(from_str("[]").is_err());
+        assert!(from_str(r#"["foo"]"#).is_err());
+        assert!(from_str(r#"["foo", "bar"]"#).is_ok());
+    }
+
+    #[test]
+    fn serialize_shortcut() {
+        let to_string = serde_json::to_string::<Shortcut>;
+
+        let shortcut = Shortcut {
+            executable: "shovel.exe".to_owned(),
+            name: "Shovel".to_owned(),
+            ..Default::default()
+        };
+
+        assert_eq!(to_string(&shortcut).unwrap(), r#"["shovel.exe","Shovel"]"#);
+
+        let shortcut_with_params = Shortcut {
+            executable: "gitk.exe".to_owned(),
+            name: "Gitk".to_owned(),
+            arguments: Some("--all".to_owned()),
+            ..Default::default()
+        };
+
+        assert_eq!(
+            to_string(&shortcut_with_params).unwrap(),
+            r#"["gitk.exe","Gitk","--all"]"#
+        );
+
+        let shortcut_with_icon = Shortcut {
+            executable: "foo".to_owned(),
+            name: "bar".to_owned(),
+            icon: Some("baz".to_owned()),
+            ..Default::default()
+        };
+
+        assert_eq!(
+            to_string(&shortcut_with_icon).unwrap(),
+            r#"["foo","bar","","baz"]"#
+        );
+    }
+
+    #[test]
+    fn deserialize_shim() {
+        let from_str = serde_json::from_str::<Shim>;
+
+        let shim = from_str(
+            r#"
+            ["shovel.exe", "shv", "--config", "~\\scoop\\persist\\shovel\\config.json"]
+            "#,
+        )
+        .unwrap();
+
+        assert_eq!(shim.executable, "shovel.exe");
+        assert_eq!(shim.name, "shv");
+        assert_eq!(
+            shim.arguments,
+            vec!["--config", r"~\scoop\persist\shovel\config.json"]
+        );
+
+        assert!(from_str("[]").is_err());
+        assert!(from_str(r#"["foo"]"#).is_err());
+        assert!(from_str(r#"["foo", "bar"]"#).is_ok());
+    }
+
+    #[test]
+    fn serialize_shim() {
+        let to_string = serde_json::to_string::<Shim>;
+
+        let shim = Shim {
+            executable: "git.exe".to_owned(),
+            name: "g".to_owned(),
+            ..Default::default()
+        };
+
+        assert_eq!(to_string(&shim).unwrap(), r#"["git.exe","g"]"#);
+
+        let shim_with_args = Shim {
+            executable: "helix.exe".to_owned(),
+            name: "hx".to_owned(),
+            arguments: vec!["--config", r"~\scoop\persist\helix\config.toml"]
+                .into_iter()
+                .map(|s| s.to_owned())
+                .collect(),
+        };
+
+        assert_eq!(
+            to_string(&shim_with_args).unwrap(),
+            r#"["helix.exe","hx","--config","~\\scoop\\persist\\helix\\config.toml"]"#
+        )
     }
 }

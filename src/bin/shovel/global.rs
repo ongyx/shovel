@@ -47,7 +47,7 @@ impl AppInfo {
                     .map(|b| match b {
                         Bin::Path(p) => p.clone(),
                         Bin::Shim(s) => {
-                            format!("{} => {} {}", s.alias(), s.executable(), s.args().join(" "))
+                            format!("{} => {} {}", s.name, s.executable, s.arguments.join(" "))
                         }
                     })
                     .collect();

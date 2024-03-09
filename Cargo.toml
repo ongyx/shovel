@@ -29,3 +29,6 @@ bin = ["dep:anyhow", "dep:clap", "dep:tabled", "dep:chrono"]
 [[bin]]
 name = "shovel"
 required-features = ["bin"]
+
+[profile.release]
+debug = true
