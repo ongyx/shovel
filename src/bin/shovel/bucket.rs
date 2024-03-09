@@ -3,7 +3,8 @@ use chrono::{DateTime, Local};
 use clap::{Args, Subcommand};
 use colored::Colorize;
 use phf::phf_map;
-use shovel::{Bucket, Shovel, ShovelResult};
+use shovel::bucket::Result as BucketResult;
+use shovel::{Bucket, Shovel};
 
 use tabled::Tabled;
 
@@ -82,7 +83,8 @@ impl Run for AddCommand {
         match url {
             Some(url) => {
                 shovel
-                    .add_bucket(&self.name, &url)
+                    .buckets
+                    .add(&self.name, &url)
                     .with_context(|| format!("Failed to add bucket {}", self.name))?;
 
                 println!("Added bucket {} from {}", self.name.bold(), url.green());
@@ -103,7 +105,8 @@ pub struct RemoveCommand {
 impl Run for RemoveCommand {
     fn run(&self, shovel: &mut Shovel) -> anyhow::Result<()> {
         shovel
-            .remove_bucket(&self.name)
+            .buckets
+            .remove(&self.name)
             .with_context(|| format!("Failed to remove bucket {}", self.name))?;
 
         println!("Removed bucket {}", self.name.bold());
@@ -122,7 +125,7 @@ struct BucketInfo {
 }
 
 impl BucketInfo {
-    fn new(bucket: &Bucket) -> ShovelResult<Self> {
+    fn new(bucket: &Bucket) -> BucketResult<Self> {
         let name = bucket.name();
         let source = bucket.origin()?;
         let updated = DateTime::from_timestamp(bucket.timestamp()?, 0)
@@ -148,9 +151,10 @@ impl ListCommand {}
 
 impl Run for ListCommand {
     fn run(&self, shovel: &mut Shovel) -> Result<()> {
-        let info: ShovelResult<Vec<_>> = shovel
-            .buckets()?
-            .map(|n| shovel.bucket(&n).and_then(|b| BucketInfo::new(b)))
+        let info: BucketResult<Vec<_>> = shovel
+            .buckets
+            .iter()?
+            .map(|n| shovel.buckets.get(&n).and_then(|b| BucketInfo::new(b)))
             .collect();
 
         println!("\n{}\n", tableify(info?));
@@ -189,7 +193,7 @@ pub struct VerifyCommand {
 
 impl VerifyCommand {
     fn verify(&self, shovel: &mut Shovel, bucket_name: &str) -> Result<i32> {
-        let bucket = shovel.bucket(bucket_name)?;
+        let bucket = shovel.buckets.get(bucket_name)?;
 
         let mut count = 0;
 
@@ -224,7 +228,7 @@ impl Run for VerifyCommand {
                 );
             }
             None => {
-                for name in shovel.buckets()? {
+                for name in shovel.buckets.iter()? {
                     let count = self.verify(shovel, &name)?;
 
                     println!(

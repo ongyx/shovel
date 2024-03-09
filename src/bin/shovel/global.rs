@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Context};
 use regex;
-use shovel::manifest::Bin;
+use shovel::app::manifest::Bin;
 use shovel::{Manifest, Shovel};
 use tabled::Tabled;
 
@@ -81,6 +81,7 @@ impl Run for SearchCommand {
         let regex = regex::Regex::new(&self.pattern).context("Invalid pattern")?;
 
         let manifests: anyhow::Result<Vec<_>> = shovel
+            .buckets
             .search(|b, a| {
                 // If bucket is not None, check the bucket name.
                 if let Some(bk) = &self.bucket {
@@ -93,7 +94,7 @@ impl Run for SearchCommand {
             })
             .context("Search failed")?
             .map(|(b, a)| {
-                let bucket = shovel.bucket(&b)?;
+                let bucket = shovel.buckets.get(&b)?;
                 let manifest = bucket.manifest(&a)?;
 
                 Ok(AppInfo::new(b, a, &manifest))

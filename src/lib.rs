@@ -1,10 +1,12 @@
+pub mod app;
 pub mod bucket;
 pub mod config;
-pub mod manifest;
+pub mod result;
 pub mod shovel;
 mod util;
 
-pub use bucket::Bucket;
+pub use app::Manifest;
+pub use bucket::{Bucket, Buckets};
 pub use config::Config;
-pub use manifest::Manifest;
-pub use shovel::{Shovel, ShovelError, ShovelResult};
+pub use result::Result;
+pub use shovel::Shovel;
