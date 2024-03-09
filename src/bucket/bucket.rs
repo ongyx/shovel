@@ -93,8 +93,7 @@ impl Bucket {
 
     /// Returns the path to an app manifest, or None if it does not exist.
     pub fn manifest_path(&self, name: &str) -> Option<PathBuf> {
-        let mut path = self.dir().to_owned();
-        path.push(format!(r"bucket\{}.json", name));
+        let path = self.dir().join(format!(r"bucket\{}.json", name));
 
         if path.exists() {
             Some(path)

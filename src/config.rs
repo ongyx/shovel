@@ -10,11 +10,9 @@ static DEFAULT_INSTALL_DIR: OnceLock<PathBuf> = OnceLock::new();
 
 /// Returns the default installation directory.
 pub fn get_default_install_dir() -> &'static Path {
-    DEFAULT_INSTALL_DIR.get_or_init(|| {
-        let mut install_dir = home::home_dir().unwrap();
-        install_dir.push("scoop");
-        install_dir
-    })
+    // A new PathBuf is allocated on PathBuf.join,
+    // but since this is only called once it does not matter.
+    DEFAULT_INSTALL_DIR.get_or_init(|| home::home_dir().unwrap().join("scoop"))
 }
 
 /// A set of configuration options for Shovel.
@@ -33,9 +31,7 @@ impl Config {
 
     /// Returns the directory where buckets are stored.
     pub fn bucket_dir(&self) -> PathBuf {
-        let mut dir = self.install_dir();
-        dir.push("buckets");
-        dir
+        self.install_dir().join("buckets")
     }
 }
 
