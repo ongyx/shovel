@@ -5,6 +5,7 @@ use tabled::settings::{Color, Style, Width};
 use tabled::{Table, Tabled};
 use terminal_size;
 
+/// Returns a formatted table for an iterator over tabular items.
 pub fn tableify<I, T>(iter: I) -> Table
 where
     I: IntoIterator<Item = T>,
@@ -25,10 +26,16 @@ where
     table
 }
 
+/// Returns the current terminal size.
 pub fn term_size() -> (u16, u16) {
     match terminal_size::terminal_size() {
         Some((w, h)) => (w.0, h.0),
         // Ol' reliable
         None => (80, 24),
     }
+}
+
+/// Parses and returns a two-tuple (bucket, app) for a slash-seperated name.
+pub fn parse_app(name: &str) -> (&str, &str) {
+    name.split_once('/').unwrap_or(("", name))
 }

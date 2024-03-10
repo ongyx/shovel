@@ -1,4 +1,7 @@
+use std::fs;
+
 use anyhow::{anyhow, Context};
+use clap::{Args, Subcommand};
 use regex;
 use shovel::app::manifest::{Bin, Bins};
 use shovel::{Manifest, Shovel};
@@ -6,23 +9,65 @@ use tabled::Tabled;
 
 use crate::bucket::BucketCommands;
 use crate::run::Run;
-use crate::util::tableify;
+use crate::util::{parse_app, tableify};
 
-#[derive(clap::Subcommand)]
+#[derive(Subcommand)]
 pub enum GlobalCommands {
-    /// Search for an app
-    Search(SearchCommand),
-
     /// Manage buckets
     #[command(subcommand)]
     Bucket(BucketCommands),
+
+    /// Show an app's manifest
+    Cat(CatCommand),
+
+    /// Search for an app
+    Search(SearchCommand),
 }
 
 impl Run for GlobalCommands {
     fn run(&self, shovel: &mut Shovel) -> anyhow::Result<()> {
         match self {
-            Self::Search(cmd) => cmd.run(shovel),
             Self::Bucket(cmds) => cmds.run(shovel),
+            Self::Cat(cmd) => cmd.run(shovel),
+            Self::Search(cmd) => cmd.run(shovel),
+        }
+    }
+}
+
+#[derive(Args)]
+pub struct CatCommand {
+    /// The app's name. To specify a bucket, use the syntax `bucket/app`.
+    app: String,
+}
+
+impl Run for CatCommand {
+    fn run(&self, shovel: &mut Shovel) -> anyhow::Result<()> {
+        let (bucket, app) = parse_app(&self.app);
+
+        let apps: Vec<_> = shovel
+            .buckets
+            .search(|b, a| (bucket.is_empty() || b == bucket) && a == app)
+            .context("Search failed")?
+            .collect();
+
+        match apps.len() {
+            0 => Err(anyhow!("App not found.")),
+            _ => {
+                if apps.len() > 1 {
+                    println!(
+                        "Warning: One or more apps have the same name. Using the first result"
+                    );
+                }
+
+                let app = &apps[0];
+                let bucket = shovel.buckets.get(&app.0)?;
+                // Since the app was returned via search, it should exist.
+                let manifest_path = bucket.manifest_path(&app.1).unwrap();
+
+                print!("{}", fs::read_to_string(manifest_path)?);
+
+                Ok(())
+            }
         }
     }
 }
@@ -72,32 +117,21 @@ impl AppInfo {
     }
 }
 
-#[derive(clap::Args)]
+#[derive(Args)]
 pub struct SearchCommand {
-    /// The search pattern as a regex.
+    /// The search pattern as a regex. To specify a bucket, use the syntax `bucket/pattern`.
     pattern: String,
-
-    /// The bucket to search.
-    #[arg(short, long)]
-    bucket: Option<String>,
 }
 
 impl Run for SearchCommand {
     fn run(&self, shovel: &mut Shovel) -> anyhow::Result<()> {
-        let regex = regex::Regex::new(&self.pattern).context("Invalid pattern")?;
+        let (bucket, app) = parse_app(&self.pattern);
 
-        let manifests: anyhow::Result<Vec<_>> = shovel
+        let regex = regex::Regex::new(app).context("Invalid pattern")?;
+
+        let apps: anyhow::Result<Vec<_>> = shovel
             .buckets
-            .search(|b, a| {
-                // If bucket is not None, check the bucket name.
-                if let Some(bk) = &self.bucket {
-                    if b != bk {
-                        return false;
-                    }
-                }
-
-                regex.is_match(a)
-            })
+            .search(|b, a| (bucket.is_empty() || b == bucket) && regex.is_match(a))
             .context("Search failed")?
             .map(|(b, a)| {
                 let bucket = shovel.buckets.get(&b)?;
@@ -107,12 +141,12 @@ impl Run for SearchCommand {
             })
             .collect();
 
-        let manifests = manifests?;
+        let apps = apps?;
 
-        match manifests.len() {
+        match apps.len() {
             0 => Err(anyhow!("No app(s) found.")),
             _ => {
-                println!("\n{}\n", tableify(manifests));
+                println!("\n{}\n", tableify(apps));
 
                 Ok(())
             }
