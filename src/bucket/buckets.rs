@@ -5,7 +5,8 @@ use std::io::Result as IOResult;
 use std::iter;
 use std::path::{Path, PathBuf};
 
-use crate::bucket::{Bucket, Error, Result};
+use crate::bucket::Bucket;
+use crate::error::{Error, Result};
 use crate::util::osstr_to_string;
 
 /// A bucket manager.

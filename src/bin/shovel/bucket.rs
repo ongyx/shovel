@@ -3,8 +3,7 @@ use chrono::{DateTime, Local};
 use clap::{Args, Subcommand};
 use colored::Colorize;
 use phf::phf_map;
-use shovel::bucket::Result as BucketResult;
-use shovel::{Bucket, Shovel};
+use shovel::{Bucket, Result as ShovelResult, Shovel};
 
 use tabled::Tabled;
 
@@ -125,7 +124,7 @@ struct BucketInfo {
 }
 
 impl BucketInfo {
-    fn new(bucket: &Bucket) -> BucketResult<Self> {
+    fn new(bucket: &Bucket) -> ShovelResult<Self> {
         let name = bucket.name();
         let source = bucket.origin()?;
         let updated = DateTime::from_timestamp(bucket.timestamp()?, 0)
@@ -151,7 +150,7 @@ impl ListCommand {}
 
 impl Run for ListCommand {
     fn run(&self, shovel: &mut Shovel) -> Result<()> {
-        let info: BucketResult<Vec<_>> = shovel
+        let info: ShovelResult<Vec<_>> = shovel
             .buckets
             .iter()?
             .map(|n| shovel.buckets.get(&n).and_then(|b| BucketInfo::new(b)))

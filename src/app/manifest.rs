@@ -1,37 +1,10 @@
 use std::collections::HashMap;
 
+use crate::app::macros::{json_enum, json_enum_key, json_struct};
+
 use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
-use serde_with::{serde_as, skip_serializing_none, OneOrMany};
-
-/// Macro for generating a JSON enum.
-macro_rules! json_enum {
-    ($item:item) => {
-        #[serde_as]
-        #[skip_serializing_none]
-        #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
-        #[serde(untagged)]
-        $item
-    };
-}
-
-/// Macro for generating a JSON enum as a map key.
-macro_rules! json_enum_key {
-    ($item:item) => {
-        #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Hash)]
-        $item
-    };
-}
-
-/// Macro for generating a JSON struct.
-macro_rules! json_struct {
-    ($item:item) => {
-        #[serde_as]
-        #[skip_serializing_none]
-        #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Default)]
-        $item
-    };
-}
+use serde::Serialize;
+use serde_with::OneOrMany;
 
 json_struct! {
     /// A list represented as a single element by itself or multiple elements.
@@ -343,17 +316,31 @@ json_struct! {
 json_enum_key! {
     /// An enum of supported architectures.
     pub enum Arch {
-        // 32-bit architecture on x86.
+        /// 32-bit architecture on x86.
         #[serde(rename = "32bit")]
         X86,
 
-        // 64-bit architecture on x86-64.
+        /// 64-bit architecture on x86-64.
         #[serde(rename = "64bit")]
         X86_64,
 
-        // 64-bit architecture on ARM.
+        /// 64-bit architecture on ARM.
         #[serde(rename = "arm64")]
         Arm64,
+    }
+}
+
+impl Default for Arch {
+    fn default() -> Self {
+        if cfg!(target_arch = "x86") {
+            Self::X86
+        } else if cfg!(target_arch = "x86_64") {
+            Self::X86_64
+        } else if cfg!(target_arch = "aarch64") {
+            Self::Arm64
+        } else {
+            panic!("Unsupported architecture")
+        }
     }
 }
 

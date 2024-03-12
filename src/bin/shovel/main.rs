@@ -3,12 +3,10 @@ mod global;
 mod run;
 mod util;
 
-use std::{fs, io};
-
 use anyhow::Context;
 use clap;
 use clap::Parser;
-use shovel::{Config, Shovel};
+use shovel::{self, Config, Shovel};
 
 use global::GlobalCommands;
 use run::Run;
@@ -31,12 +29,7 @@ fn main() -> anyhow::Result<()> {
     let config: Config = match args.config {
         Some(config_path) => {
             // Read the config file.
-            let file = fs::File::open(&config_path)
-                .with_context(|| format!("Failed to open config file {}", config_path))?;
-
-            let reader = io::BufReader::new(file);
-
-            serde_json::from_reader(reader)
+            shovel::json_from_file(&config_path)
                 .with_context(|| format!("Failed to parse config file {}", config_path))?
         }
         None => Default::default(),

@@ -2,7 +2,7 @@ use std::fs;
 
 use crate::bucket::Buckets;
 use crate::config::Config;
-use crate::result::Result;
+use crate::error::Result;
 
 /// A high-level interface to Shovel.
 pub struct Shovel {

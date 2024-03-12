@@ -1,17 +1,15 @@
 use std::fs;
-use std::io;
 use std::path::{Path, PathBuf};
 
 use git2;
 
 use crate::app::Manifest;
-use crate::util::osstr_to_string;
-
-use crate::bucket::{Error, Result};
+use crate::error::{Error, Result};
+use crate::util::{json_from_file, osstr_to_string};
 
 /// A collection of app manifests in a Git repository.
 ///
-/// At minimum, the repository must have a `bucket` directory, with manifest files in `.json` format.
+/// The repository must have a `bucket` directory, with manifest files in `.json` format.
 /// Refer to [`crate::manifest::Manifest`] for the schema.
 pub struct Bucket {
     dir: PathBuf,
@@ -110,15 +108,10 @@ impl Bucket {
     ///
     /// # Errors
     ///
-    /// If the manifest file does not exist, `BucketError::ManifestNotFound` is returned.
+    /// If the manifest file does not exist, `Error::ManifestNotFound` is returned.
     pub fn manifest(&self, name: &str) -> Result<Manifest> {
         let path = self.manifest_path(name).ok_or(Error::ManifestNotFound)?;
 
-        let file = fs::File::open(path)?;
-
-        let reader = io::BufReader::new(file);
-        let manifest = serde_json::from_reader(reader)?;
-
-        Ok(manifest)
+        json_from_file(path)
     }
 }

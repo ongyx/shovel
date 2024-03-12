@@ -1,10 +1,6 @@
 use std::io;
 
-use git2;
-use serde_json;
-use thiserror;
-
-/// A bucket error.
+/// A catch-all Shovel error.
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     /// A bucket does not exist.
@@ -19,6 +15,10 @@ pub enum Error {
     #[error("Manifest not found")]
     ManifestNotFound,
 
+    /// An app's metadata does not exist.
+    #[error("Metadata not found")]
+    MetadataNotFound,
+
     /// An underlying error with serde_json.
     #[error(transparent)]
     JSON(#[from] serde_json::Error),
@@ -32,5 +32,5 @@ pub enum Error {
     Git(#[from] git2::Error),
 }
 
-/// A bucket result.
+/// A Shovel result.
 pub type Result<T> = std::result::Result<T, Error>;
