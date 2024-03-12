@@ -1,6 +1,6 @@
 use std::ffi::OsStr;
-use std::fs::File;
-use std::io::BufReader;
+use std::fs::{self, File};
+use std::io::{BufReader, Result as IOResult};
 use std::path::Path;
 
 use serde::de::DeserializeOwned;
@@ -33,4 +33,23 @@ where
     let value_t = serde_json::from_reader(reader)?;
 
     Ok(value_t)
+}
+
+/// List all directories in a path by their final component.
+///
+/// # Arguments
+///
+/// * `path` - The path.
+pub fn list_dir<P>(path: P) -> Result<impl Iterator<Item = String>>
+where
+    P: AsRef<Path>,
+{
+    // Collect the first error.
+    let entries: IOResult<Vec<_>> = fs::read_dir(path)?.collect();
+
+    Ok(entries?
+        .into_iter()
+        .map(|e| e.path())
+        .filter(|p| p.is_dir())
+        .map(|p| osstr_to_string(p.file_name().unwrap())))
 }

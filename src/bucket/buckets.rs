@@ -1,22 +1,27 @@
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::fs;
-use std::io::Result as IOResult;
 use std::iter;
 use std::path::{Path, PathBuf};
 
 use crate::bucket::Bucket;
 use crate::error::{Error, Result};
-use crate::util::osstr_to_string;
+use crate::util::list_dir;
 
 /// A bucket manager.
+///
+/// Buckets are stored as sub-directories. For example:
+/// * `dir`
+///   * `bucket1`
+///   * `bucket2`
+///   * `...`
 pub struct Buckets {
     dir: PathBuf,
     map: HashMap<String, Bucket>,
 }
 
 impl Buckets {
-    /// Creates and returns a new bucket manager.
+    /// Returns a new bucket manager.
     ///
     /// # Arguments
     ///
@@ -33,14 +38,7 @@ impl Buckets {
 
     /// Returns an iterator over all buckets by name.
     pub fn iter(&self) -> Result<impl Iterator<Item = String>> {
-        // Collect the first error.
-        let entries: IOResult<Vec<_>> = fs::read_dir(&self.dir)?.collect();
-
-        Ok(entries?
-            .into_iter()
-            .map(|e| e.path())
-            .filter(|p| p.is_dir())
-            .map(|p| osstr_to_string(p.file_name().unwrap())))
+        list_dir(self.dir.to_owned())
     }
 
     /// Returns the path to a bucket, or None if it does not exist.

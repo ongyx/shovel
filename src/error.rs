@@ -11,13 +11,17 @@ pub enum Error {
     #[error("Bucket already exists")]
     BucketExists,
 
+    /// An app (version) does not exist.
+    #[error("App {name:?} with version {version:?} not found")]
+    AppNotFound { name: String, version: String },
+
     /// An app manifest does not exist.
-    #[error("Manifest not found")]
-    ManifestNotFound,
+    #[error("Manifest not found at {path}")]
+    ManifestNotFound { path: String },
 
     /// An app's metadata does not exist.
-    #[error("Metadata not found")]
-    MetadataNotFound,
+    #[error("Metadata not found at {path}")]
+    MetadataNotFound { path: String },
 
     /// An underlying error with serde_json.
     #[error(transparent)]

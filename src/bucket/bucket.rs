@@ -1,4 +1,5 @@
 use std::fs;
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 
 use git2;
@@ -89,15 +90,9 @@ impl Bucket {
             .map(|p| osstr_to_string(p.file_stem().unwrap())))
     }
 
-    /// Returns the path to an app manifest, or None if it does not exist.
-    pub fn manifest_path(&self, name: &str) -> Option<PathBuf> {
-        let path = self.dir().join(format!(r"bucket\{}.json", name));
-
-        if path.exists() {
-            Some(path)
-        } else {
-            None
-        }
+    /// Returns the path to an app manifest.
+    pub fn manifest_path(&self, name: &str) -> PathBuf {
+        self.dir().join(format!(r"bucket\{}.json", name))
     }
 
     /// Parses and returns an app manifest.
@@ -110,8 +105,14 @@ impl Bucket {
     ///
     /// If the manifest file does not exist, `Error::ManifestNotFound` is returned.
     pub fn manifest(&self, name: &str) -> Result<Manifest> {
-        let path = self.manifest_path(name).ok_or(Error::ManifestNotFound)?;
+        let path = self.manifest_path(name);
 
-        json_from_file(path)
+        json_from_file(&path).map_err(|err| match err {
+            // Map the NotFound IO error kind to ManifestNotFound.
+            Error::IO(ioerr) if ioerr.kind() == ErrorKind::NotFound => Error::ManifestNotFound {
+                path: osstr_to_string(path.as_os_str()),
+            },
+            _ => err,
+        })
     }
 }

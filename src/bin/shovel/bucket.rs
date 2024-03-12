@@ -1,5 +1,4 @@
-use anyhow::{anyhow, Context, Result};
-use chrono::{DateTime, Local};
+use anyhow::{bail, Context, Result};
 use clap::{Args, Subcommand};
 use colored::Colorize;
 use phf::phf_map;
@@ -8,7 +7,7 @@ use shovel::{Bucket, Result as ShovelResult, Shovel};
 use tabled::Tabled;
 
 use crate::run::Run;
-use crate::util::tableify;
+use crate::util::{tableify, unix_to_human};
 
 /// Map of known bucket names to their URLs.
 /// Derived from https://github.com/ScoopInstaller/Scoop/blob/master/buckets.json
@@ -90,7 +89,7 @@ impl Run for AddCommand {
 
                 Ok(())
             }
-            None => Err(anyhow!("URL was not specified")),
+            None => bail!("URL was not specified"),
         }
     }
 }
@@ -127,11 +126,7 @@ impl BucketInfo {
     fn new(bucket: &Bucket) -> ShovelResult<Self> {
         let name = bucket.name();
         let source = bucket.origin()?;
-        let updated = DateTime::from_timestamp(bucket.timestamp()?, 0)
-            .unwrap()
-            .with_timezone(&Local)
-            .format("%d/%m/%Y %H:%M:%S %P")
-            .to_string();
+        let updated = unix_to_human(bucket.timestamp()?);
         let manifests = bucket.manifests()?.count();
 
         Ok(Self {
@@ -191,51 +186,54 @@ pub struct VerifyCommand {
 }
 
 impl VerifyCommand {
-    fn verify(&self, shovel: &mut Shovel, bucket_name: &str) -> Result<i32> {
+    fn verify(&self, shovel: &mut Shovel, bucket_name: &str) -> Result<(i32, i32)> {
         let bucket = shovel.buckets.get(bucket_name)?;
 
-        let mut count = 0;
+        let mut success = 0;
+        let mut failure = 0;
 
         for manifest_name in bucket.manifests()? {
-            bucket.manifest(&manifest_name).with_context(|| {
-                format!(
-                    "Failed parsing manifest {}",
-                    bucket
-                        .manifest_path(&manifest_name)
-                        .unwrap()
-                        .to_string_lossy()
-                )
-            })?;
+            let result = bucket.manifest(&manifest_name).context(format!(
+                "Failed parsing manifest {}",
+                bucket.manifest_path(&manifest_name).to_string_lossy()
+            ));
 
-            count += 1;
+            match result {
+                Ok(_) => success += 1,
+                Err(err) => {
+                    println!("{:?}", err);
+
+                    failure += 1;
+                }
+            }
         }
 
-        Ok(count)
+        Ok((success, failure))
     }
 }
 
 impl Run for VerifyCommand {
     fn run(&self, shovel: &mut Shovel) -> Result<()> {
-        match &self.bucket {
-            Some(name) => {
-                let count = self.verify(shovel, name)?;
+        let bucket_names = match &self.bucket {
+            Some(name) => vec![name.to_owned()],
+            None => shovel.buckets.iter()?.collect(),
+        };
 
-                println!(
+        for bucket_name in bucket_names {
+            let (success, failure) = self.verify(shovel, &bucket_name)?;
+
+            match failure {
+                0 => println!(
                     "{}: parsed {} manifests",
-                    name.bold(),
-                    count.to_string().green()
-                );
-            }
-            None => {
-                for name in shovel.buckets.iter()? {
-                    let count = self.verify(shovel, &name)?;
-
-                    println!(
-                        "{}: parsed {} manifests",
-                        name.bold(),
-                        count.to_string().green()
-                    );
-                }
+                    bucket_name.bold(),
+                    success.to_string().green()
+                ),
+                _ => println!(
+                    "{}: parsed {} manifests, {} failed",
+                    bucket_name.bold(),
+                    success.to_string().green(),
+                    failure.to_string().red(),
+                ),
             }
         }
 

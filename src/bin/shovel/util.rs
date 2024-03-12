@@ -1,3 +1,4 @@
+use chrono::{DateTime, Local};
 use tabled::settings::object::Rows;
 use tabled::settings::peaker::PriorityMax;
 use tabled::settings::themes::Colorization;
@@ -38,4 +39,13 @@ pub fn term_size() -> (u16, u16) {
 /// Parses and returns a two-tuple (bucket, app) for a slash-seperated name.
 pub fn parse_app(name: &str) -> (&str, &str) {
     name.split_once('/').unwrap_or(("", name))
+}
+
+/// Transforms a UNIX timestamp to a human-readable timestamp.
+pub fn unix_to_human(secs: i64) -> String {
+    DateTime::from_timestamp(secs, 0)
+        .unwrap()
+        .with_timezone(&Local)
+        .format("%d/%m/%Y %H:%M:%S %P")
+        .to_string()
 }

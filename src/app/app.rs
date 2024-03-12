@@ -1,8 +1,9 @@
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 
 use crate::app::{Manifest, Metadata};
 use crate::error::{Error, Result};
-use crate::util::json_from_file;
+use crate::util::{json_from_file, osstr_to_string};
 
 /// An installed app in a directory.
 ///
@@ -50,20 +51,18 @@ impl App {
     ///
     /// If the manifest file does not exist, `Error::ManifestNotFound` is returned.
     pub fn manifest(&self) -> Result<Manifest> {
-        let path = self.manifest_path().ok_or(Error::ManifestNotFound)?;
+        let path = self
+            .manifest_path()
+            .ok_or_else(|| Error::ManifestNotFound {
+                path: osstr_to_string(self.dir().join("manifest.json").as_os_str()),
+            })?;
 
         json_from_file(path)
     }
 
-    /// Returns the path to the app's metadata, or None if it does not exist.
-    pub fn metadata_path(&self) -> Option<PathBuf> {
-        let path = self.dir().join("install.json");
-
-        if path.exists() {
-            Some(path)
-        } else {
-            None
-        }
+    /// Returns the path to the app's metadata.
+    pub fn metadata_path(&self) -> PathBuf {
+        self.dir().join("install.json")
     }
 
     /// Parses and returns the app's metadata.
@@ -72,8 +71,13 @@ impl App {
     ///
     /// If the metadata file does not exist, `Error::MetadataNotFound` is returned.
     pub fn metadata(&self) -> Result<Metadata> {
-        let path = self.metadata_path().ok_or(Error::MetadataNotFound)?;
+        let path = self.metadata_path();
 
-        json_from_file(path)
+        json_from_file(&path).map_err(|err| match err {
+            Error::IO(ioerr) if ioerr.kind() == ErrorKind::NotFound => Error::MetadataNotFound {
+                path: osstr_to_string(path.as_os_str()),
+            },
+            _ => err,
+        })
     }
 }

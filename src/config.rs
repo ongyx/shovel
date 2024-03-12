@@ -29,6 +29,11 @@ impl Config {
         PathBuf::from(&self.install_dir)
     }
 
+    /// Returns the directory where apps are stored.
+    pub fn app_dir(&self) -> PathBuf {
+        self.install_dir().join("apps")
+    }
+
     /// Returns the directory where buckets are stored.
     pub fn bucket_dir(&self) -> PathBuf {
         self.install_dir().join("buckets")

@@ -5,7 +5,7 @@ pub mod error;
 pub mod shovel;
 mod util;
 
-pub use app::Manifest;
+pub use app::{App, Apps, Manifest};
 pub use bucket::{Bucket, Buckets};
 pub use config::Config;
 pub use error::{Error, Result};

@@ -1,15 +1,16 @@
 use std::fs;
+use std::time::UNIX_EPOCH;
 
-use anyhow::{anyhow, Context};
+use anyhow::{bail, Context};
 use clap::{Args, Subcommand};
 use regex;
 use shovel::app::manifest::{Bin, Bins};
-use shovel::{Manifest, Shovel};
+use shovel::{App, Manifest, Result, Shovel};
 use tabled::Tabled;
 
 use crate::bucket::BucketCommands;
 use crate::run::Run;
-use crate::util::{parse_app, tableify};
+use crate::util::{parse_app, tableify, unix_to_human};
 
 #[derive(Subcommand)]
 pub enum GlobalCommands {
@@ -20,6 +21,9 @@ pub enum GlobalCommands {
     /// Show an app's manifest
     Cat(CatCommand),
 
+    /// List installed apps
+    List(ListCommand),
+
     /// Search for an app
     Search(SearchCommand),
 }
@@ -29,6 +33,7 @@ impl Run for GlobalCommands {
         match self {
             Self::Bucket(cmds) => cmds.run(shovel),
             Self::Cat(cmd) => cmd.run(shovel),
+            Self::List(cmd) => cmd.run(shovel),
             Self::Search(cmd) => cmd.run(shovel),
         }
     }
@@ -51,7 +56,7 @@ impl Run for CatCommand {
             .collect();
 
         match apps.len() {
-            0 => Err(anyhow!("App not found.")),
+            0 => bail!("App not found."),
             _ => {
                 if apps.len() > 1 {
                     println!(
@@ -61,8 +66,7 @@ impl Run for CatCommand {
 
                 let app = &apps[0];
                 let bucket = shovel.buckets.get(&app.0)?;
-                // Since the app was returned via search, it should exist.
-                let manifest_path = bucket.manifest_path(&app.1).unwrap();
+                let manifest_path = bucket.manifest_path(&app.1);
 
                 print!("{}", fs::read_to_string(manifest_path)?);
 
@@ -74,14 +78,110 @@ impl Run for CatCommand {
 
 #[derive(Tabled)]
 #[tabled(rename_all = "pascal")]
-struct AppInfo {
+pub struct ListInfo {
+    name: String,
+    version: String,
+    bucket: String,
+    updated: String,
+}
+
+impl ListInfo {
+    fn new(name: &str, app: &App) -> Result<Self> {
+        let manifest = app.manifest()?;
+        let metadata = app.metadata()?;
+
+        let version = manifest.version;
+        let bucket = metadata.bucket;
+        // https://doc.rust-lang.org/std/time/struct.SystemTime.html#associatedconstant.UNIX_EPOCH
+        let updated_ts = app
+            .dir()
+            .metadata()?
+            .modified()?
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let updated = unix_to_human(updated_ts as i64);
+
+        Ok(Self {
+            name: name.to_owned(),
+            version,
+            bucket,
+            updated,
+        })
+    }
+}
+
+#[derive(Args)]
+pub struct ListCommand {
+    /// The apps to list as a regex. To specify a bucket, use the syntax `bucket/pattern`.
+    query: Option<String>,
+}
+
+impl Run for ListCommand {
+    fn run(&self, shovel: &mut Shovel) -> anyhow::Result<()> {
+        let query = match &self.query {
+            Some(q) => q,
+            None => "",
+        };
+
+        let (bucket, app) = parse_app(query);
+
+        let regex = regex::Regex::new(app).context("Invalid pattern")?;
+
+        let apps: Vec<_> = shovel
+            .apps
+            .iter()?
+            .map(|a| -> anyhow::Result<_> {
+                let app = shovel
+                    .apps
+                    .get_current(&a)
+                    .with_context(|| format!("Failed to open app {:?}", &a))?;
+                let info = ListInfo::new(&a, &app)
+                    .with_context(|| format!("Failed to read app {:?}", &a))?;
+
+                Ok(info)
+            })
+            .filter_map(|r| match r {
+                // If there is info, check the bucket and name.
+                Ok(info) => {
+                    if (bucket.is_empty() || info.bucket == bucket)
+                        && (app.is_empty() || regex.is_match(&info.name))
+                    {
+                        Some(info)
+                    } else {
+                        None
+                    }
+                }
+                Err(err) => {
+                    // Print error and move on.
+                    println!("{:?}", err);
+
+                    None
+                }
+            })
+            .collect();
+
+        match apps.len() {
+            0 => bail!("No app(s) found."),
+            _ => {
+                println!("\n{}\n", tableify(apps));
+
+                Ok(())
+            }
+        }
+    }
+}
+
+#[derive(Tabled)]
+#[tabled(rename_all = "pascal")]
+struct SearchInfo {
     name: String,
     version: String,
     bucket: String,
     binaries: String,
 }
 
-impl AppInfo {
+impl SearchInfo {
     fn new(bucket: String, name: String, manifest: &Manifest) -> Self {
         let version = manifest.version.clone();
         let binaries = match &manifest.common.bin {
@@ -108,7 +208,7 @@ impl AppInfo {
             None => "".to_owned(),
         };
 
-        AppInfo {
+        SearchInfo {
             name,
             version,
             bucket,
@@ -119,17 +219,17 @@ impl AppInfo {
 
 #[derive(Args)]
 pub struct SearchCommand {
-    /// The search pattern as a regex. To specify a bucket, use the syntax `bucket/pattern`.
-    pattern: String,
+    /// The apps to search as a regex. To specify a bucket, use the syntax `bucket/pattern`.
+    query: String,
 }
 
 impl Run for SearchCommand {
     fn run(&self, shovel: &mut Shovel) -> anyhow::Result<()> {
-        let (bucket, app) = parse_app(&self.pattern);
+        let (bucket, app) = parse_app(&self.query);
 
         let regex = regex::Regex::new(app).context("Invalid pattern")?;
 
-        let apps: anyhow::Result<Vec<_>> = shovel
+        let apps: Result<Vec<_>> = shovel
             .buckets
             .search(|b, a| (bucket.is_empty() || b == bucket) && regex.is_match(a))
             .context("Search failed")?
@@ -137,14 +237,14 @@ impl Run for SearchCommand {
                 let bucket = shovel.buckets.get(&b)?;
                 let manifest = bucket.manifest(&a)?;
 
-                Ok(AppInfo::new(b, a, &manifest))
+                Ok(SearchInfo::new(b, a, &manifest))
             })
             .collect();
 
         let apps = apps?;
 
         match apps.len() {
-            0 => Err(anyhow!("No app(s) found.")),
+            0 => bail!("No app(s) found."),
             _ => {
                 println!("\n{}\n", tableify(apps));
 
