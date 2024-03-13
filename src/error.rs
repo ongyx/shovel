@@ -1,5 +1,9 @@
 use std::io;
 
+use git2;
+use serde_json;
+use serde_path_to_error;
+
 /// A catch-all Shovel error.
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -11,9 +15,9 @@ pub enum Error {
     #[error("Bucket already exists")]
     BucketExists,
 
-    /// An app (version) does not exist.
-    #[error("App not found")]
-    AppNotFound,
+    /// An app version does not exist.
+    #[error("App version not found")]
+    AppVersionNotFound,
 
     /// An app manifest does not exist.
     #[error("Manifest not found")]
@@ -25,7 +29,7 @@ pub enum Error {
 
     /// An underlying error with serde_json.
     #[error(transparent)]
-    JSON(#[from] serde_json::Error),
+    JSON(#[from] serde_path_to_error::Error<serde_json::Error>),
 
     /// An underlying error with std::io.
     #[error(transparent)]

@@ -2,7 +2,6 @@ use std::fs;
 use std::time;
 
 use clap;
-use color_eyre::Section;
 use eyre;
 use eyre::WrapErr;
 use regex;
@@ -78,13 +77,14 @@ impl Run for CatCommand {
     }
 }
 
-#[derive(tabled::Tabled)]
+#[derive(tabled::Tabled, Default)]
 #[tabled(rename_all = "pascal")]
-pub struct ListInfo {
+struct ListInfo {
     name: String,
     version: String,
     bucket: String,
     updated: String,
+    info: String,
 }
 
 impl ListInfo {
@@ -109,6 +109,7 @@ impl ListInfo {
             version,
             bucket,
             updated,
+            ..Default::default()
         })
     }
 }
@@ -117,6 +118,23 @@ impl ListInfo {
 pub struct ListCommand {
     /// The apps to list as a regex. To specify a bucket, use the syntax `bucket/pattern`.
     query: Option<String>,
+}
+
+impl ListCommand {
+    fn app_info(&self, shovel: &mut shovel::Shovel, name: &str) -> ListInfo {
+        match shovel.apps.get_current(name) {
+            Ok(app) => ListInfo::new(name, &app).unwrap_or_else(|_| ListInfo {
+                name: name.to_owned(),
+                // Use placeholders if the app's manifest/metadata cannot be read.
+                ..Default::default()
+            }),
+            Err(err) => ListInfo {
+                name: name.to_owned(),
+                info: err.to_string(),
+                ..Default::default()
+            },
+        }
+    }
 }
 
 impl Run for ListCommand {
@@ -133,32 +151,14 @@ impl Run for ListCommand {
         let apps: Vec<_> = shovel
             .apps
             .iter()?
-            .map(|a| -> eyre::Result<_> {
-                let app = shovel
-                    .apps
-                    // If the app's current version is missing, the installation is corrupt.
-                    .get_current(&a)
-                    .wrap_err_with(|| format!("Failed to open app {:?}", &a))?;
-                let info = ListInfo::new(&a, &app)
-                    .wrap_err_with(|| format!("Failed to read app {:?}", &a))?;
-
-                Ok(info)
-            })
-            .filter_map(|r| match r {
-                // If there is info, check the bucket and name.
-                Ok(info) => {
-                    if (bucket.is_empty() || info.bucket == bucket)
-                        && (app.is_empty() || regex.is_match(&info.name))
-                    {
-                        Some(info)
-                    } else {
-                        None
-                    }
-                }
-                Err(err) => {
-                    // Print error and move on.
-                    println!("{:?}", err.warning("Skipping app"));
-
+            .map(|name| self.app_info(shovel, &name))
+            .filter_map(|info| {
+                // check the bucket and name.
+                if (bucket.is_empty() || info.bucket == bucket)
+                    && (app.is_empty() || regex.is_match(&info.name))
+                {
+                    Some(info)
+                } else {
                     None
                 }
             })

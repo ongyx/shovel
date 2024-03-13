@@ -1,7 +1,7 @@
 use clap;
-use colored::Colorize;
 use eyre;
 use eyre::{bail, WrapErr};
+use owo_colors::OwoColorize;
 use phf;
 use shovel;
 use tabled;
@@ -179,6 +179,11 @@ impl Run for KnownCommand {
     }
 }
 
+enum Verified {
+    Success(String),
+    Failure(String, shovel::Error),
+}
+
 #[derive(clap::Args)]
 pub struct VerifyCommand {
     /// The bucket to verify apps for. If not specified, all buckets are verified.
@@ -186,56 +191,64 @@ pub struct VerifyCommand {
 }
 
 impl VerifyCommand {
-    fn verify(&self, shovel: &mut shovel::Shovel, bucket_name: &str) -> eyre::Result<(i32, i32)> {
+    fn verify<'sh>(
+        &self,
+        shovel: &'sh mut shovel::Shovel,
+        bucket_name: &str,
+    ) -> shovel::Result<impl Iterator<Item = Verified> + 'sh> {
+        use Verified::*;
+
         let bucket = shovel.buckets.get(bucket_name)?;
 
-        let mut success = 0;
-        let mut failure = 0;
-
-        for manifest_name in bucket.manifests()? {
-            let result = bucket.manifest(&manifest_name).wrap_err_with(|| {
-                format!(
-                    "Failed parsing manifest {}",
-                    bucket.manifest_path(&manifest_name).to_string_lossy()
-                )
-            });
-
-            match result {
-                Ok(_) => success += 1,
-                Err(err) => {
-                    println!("{:?}", err);
-
-                    failure += 1;
-                }
-            }
-        }
-
-        Ok((success, failure))
+        Ok(bucket
+            .manifests()?
+            // The manifest is not actually needed, so replace it with a unit value.
+            .map(|name| match bucket.manifest(&name) {
+                Ok(_) => Success(name.to_owned()),
+                Err(err) => Failure(name.to_owned(), err),
+            }))
     }
 }
 
 impl Run for VerifyCommand {
     fn run(&self, shovel: &mut shovel::Shovel) -> eyre::Result<()> {
+        use Verified::*;
+
         let bucket_names = match &self.bucket {
             Some(name) => vec![name.to_owned()],
             None => shovel.buckets.iter()?.collect(),
         };
 
         for bucket_name in bucket_names {
-            let (success, failure) = self.verify(shovel, &bucket_name)?;
+            let mut success = 0;
+            let mut failures = vec![];
 
-            match failure {
+            for verified in self.verify(shovel, &bucket_name)? {
+                match verified {
+                    Success(_) => success += 1,
+                    Failure(name, err) => failures.push((name, err)),
+                }
+            }
+
+            match failures.len() {
                 0 => println!(
                     "{}: parsed {} manifests",
                     bucket_name.bold(),
                     success.to_string().green()
                 ),
-                _ => println!(
-                    "{}: parsed {} manifests, {} failed",
-                    bucket_name.bold(),
-                    success.to_string().green(),
-                    failure.to_string().red(),
-                ),
+                n => {
+                    println!(
+                        "{}: parsed {} manifests, {} failed:",
+                        bucket_name.bold(),
+                        success.to_string().green(),
+                        n.to_string().red(),
+                    );
+
+                    // Print out all errors.
+                    for failure in failures {
+                        println!("* {}: {}", failure.0.bold(), failure.1)
+                    }
+                }
             }
         }
 

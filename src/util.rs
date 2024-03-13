@@ -5,6 +5,7 @@ use std::path;
 
 use serde::de;
 use serde_json;
+use serde_path_to_error;
 
 use crate::error::Result;
 
@@ -30,9 +31,11 @@ where
     let file = fs::File::open(path)?;
 
     let reader = io::BufReader::new(file);
-    let value_t = serde_json::from_reader(reader)?;
+    let de = &mut serde_json::Deserializer::from_reader(reader);
 
-    Ok(value_t)
+    let value = serde_path_to_error::deserialize(de)?;
+
+    Ok(value)
 }
 
 ///
