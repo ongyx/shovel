@@ -1,7 +1,7 @@
-use anyhow;
-use anyhow::{bail, Context};
 use clap;
 use colored::Colorize;
+use eyre;
+use eyre::{bail, WrapErr};
 use phf;
 use shovel;
 use tabled;
@@ -49,7 +49,7 @@ pub enum BucketCommands {
 }
 
 impl Run for BucketCommands {
-    fn run(&self, shovel: &mut shovel::Shovel) -> anyhow::Result<()> {
+    fn run(&self, shovel: &mut shovel::Shovel) -> eyre::Result<()> {
         match self {
             Self::Add(cmd) => cmd.run(shovel),
             Self::Remove(cmd) => cmd.run(shovel),
@@ -71,7 +71,7 @@ pub struct AddCommand {
 }
 
 impl Run for AddCommand {
-    fn run(&self, shovel: &mut shovel::Shovel) -> anyhow::Result<()> {
+    fn run(&self, shovel: &mut shovel::Shovel) -> eyre::Result<()> {
         let url = self
             .url
             .as_ref()
@@ -83,7 +83,7 @@ impl Run for AddCommand {
                 shovel
                     .buckets
                     .add(&self.name, &url)
-                    .with_context(|| format!("Failed to add bucket {}", self.name))?;
+                    .wrap_err_with(|| format!("Failed to add bucket {}", self.name))?;
 
                 println!("Added bucket {} from {}", self.name.bold(), url.green());
 
@@ -101,11 +101,11 @@ pub struct RemoveCommand {
 }
 
 impl Run for RemoveCommand {
-    fn run(&self, shovel: &mut shovel::Shovel) -> anyhow::Result<()> {
+    fn run(&self, shovel: &mut shovel::Shovel) -> eyre::Result<()> {
         shovel
             .buckets
             .remove(&self.name)
-            .with_context(|| format!("Failed to remove bucket {}", self.name))?;
+            .wrap_err_with(|| format!("Failed to remove bucket {}", self.name))?;
 
         println!("Removed bucket {}", self.name.bold());
 
@@ -144,7 +144,7 @@ pub struct ListCommand {}
 impl ListCommand {}
 
 impl Run for ListCommand {
-    fn run(&self, shovel: &mut shovel::Shovel) -> anyhow::Result<()> {
+    fn run(&self, shovel: &mut shovel::Shovel) -> eyre::Result<()> {
         let info: shovel::Result<Vec<_>> = shovel
             .buckets
             .iter()?
@@ -168,7 +168,7 @@ struct KnownInfo {
 pub struct KnownCommand {}
 
 impl Run for KnownCommand {
-    fn run(&self, _shovel: &mut shovel::Shovel) -> anyhow::Result<()> {
+    fn run(&self, _shovel: &mut shovel::Shovel) -> eyre::Result<()> {
         let known = KNOWN_BUCKETS
             .into_iter()
             .map(|(name, source)| KnownInfo { name, source });
@@ -186,14 +186,14 @@ pub struct VerifyCommand {
 }
 
 impl VerifyCommand {
-    fn verify(&self, shovel: &mut shovel::Shovel, bucket_name: &str) -> anyhow::Result<(i32, i32)> {
+    fn verify(&self, shovel: &mut shovel::Shovel, bucket_name: &str) -> eyre::Result<(i32, i32)> {
         let bucket = shovel.buckets.get(bucket_name)?;
 
         let mut success = 0;
         let mut failure = 0;
 
         for manifest_name in bucket.manifests()? {
-            let result = bucket.manifest(&manifest_name).with_context(|| {
+            let result = bucket.manifest(&manifest_name).wrap_err_with(|| {
                 format!(
                     "Failed parsing manifest {}",
                     bucket.manifest_path(&manifest_name).to_string_lossy()
@@ -215,7 +215,7 @@ impl VerifyCommand {
 }
 
 impl Run for VerifyCommand {
-    fn run(&self, shovel: &mut shovel::Shovel) -> anyhow::Result<()> {
+    fn run(&self, shovel: &mut shovel::Shovel) -> eyre::Result<()> {
         let bucket_names = match &self.bucket {
             Some(name) => vec![name.to_owned()],
             None => shovel.buckets.iter()?.collect(),

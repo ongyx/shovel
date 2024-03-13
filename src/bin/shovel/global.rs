@@ -1,9 +1,10 @@
 use std::fs;
 use std::time;
 
-use anyhow;
-use anyhow::Context;
 use clap;
+use color_eyre::Section;
+use eyre;
+use eyre::WrapErr;
 use regex;
 use shovel;
 use shovel::app::manifest;
@@ -30,7 +31,7 @@ pub enum GlobalCommands {
 }
 
 impl Run for GlobalCommands {
-    fn run(&self, shovel: &mut shovel::Shovel) -> anyhow::Result<()> {
+    fn run(&self, shovel: &mut shovel::Shovel) -> eyre::Result<()> {
         match self {
             Self::Bucket(cmds) => cmds.run(shovel),
             Self::Cat(cmd) => cmd.run(shovel),
@@ -47,17 +48,17 @@ pub struct CatCommand {
 }
 
 impl Run for CatCommand {
-    fn run(&self, shovel: &mut shovel::Shovel) -> anyhow::Result<()> {
+    fn run(&self, shovel: &mut shovel::Shovel) -> eyre::Result<()> {
         let (bucket, app) = parse_app(&self.app);
 
         let apps: Vec<_> = shovel
             .buckets
             .search(|b, a| (bucket.is_empty() || b == bucket) && a == app)
-            .context("Search failed")?
+            .wrap_err("Search failed")?
             .collect();
 
         match apps.len() {
-            0 => anyhow::bail!("App not found."),
+            0 => eyre::bail!("App not found."),
             _ => {
                 if apps.len() > 1 {
                     println!(
@@ -119,7 +120,7 @@ pub struct ListCommand {
 }
 
 impl Run for ListCommand {
-    fn run(&self, shovel: &mut shovel::Shovel) -> anyhow::Result<()> {
+    fn run(&self, shovel: &mut shovel::Shovel) -> eyre::Result<()> {
         let query = match &self.query {
             Some(q) => q,
             None => "",
@@ -127,19 +128,19 @@ impl Run for ListCommand {
 
         let (bucket, app) = parse_app(query);
 
-        let regex = regex::Regex::new(app).context("Invalid pattern")?;
+        let regex = regex::Regex::new(app).wrap_err("Invalid pattern")?;
 
         let apps: Vec<_> = shovel
             .apps
             .iter()?
-            .map(|a| -> anyhow::Result<_> {
+            .map(|a| -> eyre::Result<_> {
                 let app = shovel
                     .apps
                     // If the app's current version is missing, the installation is corrupt.
                     .get_current(&a)
-                    .with_context(|| format!("Failed to open app {:?}", &a))?;
+                    .wrap_err_with(|| format!("Failed to open app {:?}", &a))?;
                 let info = ListInfo::new(&a, &app)
-                    .with_context(|| format!("Failed to read app {:?}", &a))?;
+                    .wrap_err_with(|| format!("Failed to read app {:?}", &a))?;
 
                 Ok(info)
             })
@@ -156,7 +157,7 @@ impl Run for ListCommand {
                 }
                 Err(err) => {
                     // Print error and move on.
-                    println!("\n{:?}", err);
+                    println!("{:?}", err.warning("Skipping app"));
 
                     None
                 }
@@ -164,7 +165,7 @@ impl Run for ListCommand {
             .collect();
 
         match apps.len() {
-            0 => anyhow::bail!("No app(s) found."),
+            0 => eyre::bail!("No app(s) found."),
             _ => {
                 println!("\n{}\n", tableify(apps));
 
@@ -228,15 +229,15 @@ pub struct SearchCommand {
 }
 
 impl Run for SearchCommand {
-    fn run(&self, shovel: &mut shovel::Shovel) -> anyhow::Result<()> {
+    fn run(&self, shovel: &mut shovel::Shovel) -> eyre::Result<()> {
         let (bucket, app) = parse_app(&self.query);
 
-        let regex = regex::Regex::new(app).context("Invalid pattern")?;
+        let regex = regex::Regex::new(app).wrap_err("Invalid pattern")?;
 
         let apps: shovel::Result<Vec<_>> = shovel
             .buckets
             .search(|b, a| (bucket.is_empty() || b == bucket) && regex.is_match(a))
-            .context("Search failed")?
+            .wrap_err("Search failed")?
             .map(|(b, a)| {
                 let bucket = shovel.buckets.get(&b)?;
                 let manifest = bucket.manifest(&a)?;
@@ -248,7 +249,7 @@ impl Run for SearchCommand {
         let apps = apps?;
 
         match apps.len() {
-            0 => anyhow::bail!("No app(s) found."),
+            0 => eyre::bail!("No app(s) found."),
             _ => {
                 println!("\n{}\n", tableify(apps));
 

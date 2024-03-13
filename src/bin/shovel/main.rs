@@ -3,9 +3,11 @@ mod global;
 mod run;
 mod util;
 
-use anyhow::Context;
 use clap;
 use clap::Parser;
+use color_eyre;
+use eyre;
+use eyre::WrapErr;
 use shovel;
 
 use global::GlobalCommands;
@@ -23,14 +25,16 @@ struct Args {
     config: Option<String>,
 }
 
-fn main() -> anyhow::Result<()> {
+fn main() -> eyre::Result<()> {
+    color_eyre::install()?;
+
     let args = Args::parse();
 
     let config: shovel::Config = match args.config {
         Some(config_path) => {
             // Read the config file.
             shovel::json_from_file(&config_path)
-                .with_context(|| format!("Failed to parse config file {}", config_path))?
+                .wrap_err_with(|| format!("Failed to parse config file {}", config_path))?
         }
         None => Default::default(),
     };

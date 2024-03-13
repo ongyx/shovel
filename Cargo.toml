@@ -16,16 +16,17 @@ thiserror = "1.0.57"
 url = { version = "2.5.0", features = ["serde"] }
 
 # CLI dependencies
-anyhow = { version = "1.0.80", optional = true }
+color-eyre = { version = "0.6", optional = true }
+eyre = { version = "0.6", default-features = false, features = ["auto-install", "track-caller"], optional = true }
 clap = { version = "4.5.1", features = ["derive"], optional = true }
 tabled = { version = "0.15.0", features = ["ansi"], optional = true }
 chrono = { version = "0.4.35", optional = true }
-phf = { version = "0.11.2", features = ["macros"] }
-colored = "2.1.0"
-terminal_size = "0.3.0"
+phf = { version = "0.11.2", features = ["macros"], optional = true }
+colored = { version = "2.1.0", optional = true }
+terminal_size = { version = "0.3.0", optional = true}
 
 [features]
-bin = ["dep:anyhow", "dep:clap", "dep:tabled", "dep:chrono"]
+bin = ["dep:color-eyre", "dep:eyre", "dep:clap", "dep:tabled", "dep:chrono", "dep:phf", "dep:colored", "dep:terminal_size"]
 
 [[bin]]
 name = "shovel"
