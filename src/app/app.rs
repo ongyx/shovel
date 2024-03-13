@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use crate::app::{Manifest, Metadata};
 use crate::error::{Error, Result};
-use crate::util::{json_from_file, osstr_to_string};
+use crate::util::json_from_file;
 
 /// An installed app in a directory.
 ///
@@ -51,11 +51,7 @@ impl App {
     ///
     /// If the manifest file does not exist, `Error::ManifestNotFound` is returned.
     pub fn manifest(&self) -> Result<Manifest> {
-        let path = self
-            .manifest_path()
-            .ok_or_else(|| Error::ManifestNotFound {
-                path: osstr_to_string(self.dir().join("manifest.json").as_os_str()),
-            })?;
+        let path = self.manifest_path().ok_or(Error::ManifestNotFound)?;
 
         json_from_file(path)
     }
@@ -74,9 +70,7 @@ impl App {
         let path = self.metadata_path();
 
         json_from_file(&path).map_err(|err| match err {
-            Error::IO(ioerr) if ioerr.kind() == ErrorKind::NotFound => Error::MetadataNotFound {
-                path: osstr_to_string(path.as_os_str()),
-            },
+            Error::IO(ioerr) if ioerr.kind() == ErrorKind::NotFound => Error::MetadataNotFound,
             _ => err,
         })
     }

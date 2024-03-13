@@ -109,9 +109,7 @@ impl Bucket {
 
         json_from_file(&path).map_err(|err| match err {
             // Map the NotFound IO error kind to ManifestNotFound.
-            Error::IO(ioerr) if ioerr.kind() == ErrorKind::NotFound => Error::ManifestNotFound {
-                path: osstr_to_string(path.as_os_str()),
-            },
+            Error::IO(ioerr) if ioerr.kind() == ErrorKind::NotFound => Error::ManifestNotFound,
             _ => err,
         })
     }

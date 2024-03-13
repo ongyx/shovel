@@ -193,10 +193,12 @@ impl VerifyCommand {
         let mut failure = 0;
 
         for manifest_name in bucket.manifests()? {
-            let result = bucket.manifest(&manifest_name).context(format!(
-                "Failed parsing manifest {}",
-                bucket.manifest_path(&manifest_name).to_string_lossy()
-            ));
+            let result = bucket.manifest(&manifest_name).with_context(|| {
+                format!(
+                    "Failed parsing manifest {}",
+                    bucket.manifest_path(&manifest_name).to_string_lossy()
+                )
+            });
 
             match result {
                 Ok(_) => success += 1,

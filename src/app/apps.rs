@@ -77,10 +77,7 @@ impl Apps {
     ///
     /// If the app does not exist, `Error::AppNotFound` is returned.
     pub fn get(&self, name: &str, version: &str) -> Result<App> {
-        let dir = self.path(name, version).ok_or_else(|| Error::AppNotFound {
-            name: name.to_owned(),
-            version: version.to_owned(),
-        })?;
+        let dir = self.path(name, version).ok_or(Error::AppNotFound)?;
 
         Ok(App::open(dir))
     }

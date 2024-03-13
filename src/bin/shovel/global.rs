@@ -134,6 +134,7 @@ impl Run for ListCommand {
             .map(|a| -> anyhow::Result<_> {
                 let app = shovel
                     .apps
+                    // If the app's current version is missing, the installation is corrupt.
                     .get_current(&a)
                     .with_context(|| format!("Failed to open app {:?}", &a))?;
                 let info = ListInfo::new(&a, &app)
@@ -154,7 +155,7 @@ impl Run for ListCommand {
                 }
                 Err(err) => {
                     // Print error and move on.
-                    println!("{:?}", err);
+                    println!("\n{:?}", err);
 
                     None
                 }
