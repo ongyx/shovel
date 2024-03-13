@@ -1,6 +1,6 @@
 use std::fs;
-use std::io::ErrorKind;
-use std::path::{Path, PathBuf};
+use std::io;
+use std::path;
 
 use git2;
 
@@ -13,7 +13,7 @@ use crate::util::{json_from_file, osstr_to_string};
 /// The repository must have a `bucket` directory, with manifest files in `.json` format.
 /// Refer to [`crate::manifest::Manifest`] for the schema.
 pub struct Bucket {
-    dir: PathBuf,
+    dir: path::PathBuf,
     repo: git2::Repository,
 }
 
@@ -25,7 +25,7 @@ impl Bucket {
     /// * `dir` - The path to the bucket. It must point to a directory.
     pub fn open<P>(dir: P) -> Result<Self>
     where
-        P: AsRef<Path>,
+        P: AsRef<path::Path>,
     {
         let dir = dir.as_ref().to_owned();
         let repo = git2::Repository::open(&dir)?;
@@ -41,7 +41,7 @@ impl Bucket {
     /// * `dir` - The path to clone the remote bucket to. It must not exist yet.
     pub fn clone<P>(url: &str, dir: P) -> Result<Self>
     where
-        P: AsRef<Path>,
+        P: AsRef<path::Path>,
     {
         let dir = dir.as_ref().to_owned();
         let repo = git2::Repository::clone(url, &dir)?;
@@ -50,7 +50,7 @@ impl Bucket {
     }
 
     /// Returns the bucket directory.
-    pub fn dir(&self) -> &Path {
+    pub fn dir(&self) -> &path::Path {
         &self.dir
     }
 
@@ -91,7 +91,7 @@ impl Bucket {
     }
 
     /// Returns the path to an app manifest.
-    pub fn manifest_path(&self, name: &str) -> PathBuf {
+    pub fn manifest_path(&self, name: &str) -> path::PathBuf {
         self.dir().join(format!(r"bucket\{}.json", name))
     }
 
@@ -109,7 +109,7 @@ impl Bucket {
 
         json_from_file(&path).map_err(|err| match err {
             // Map the NotFound IO error kind to ManifestNotFound.
-            Error::IO(ioerr) if ioerr.kind() == ErrorKind::NotFound => Error::ManifestNotFound,
+            Error::IO(ioerr) if ioerr.kind() == io::ErrorKind::NotFound => Error::ManifestNotFound,
             _ => err,
         })
     }

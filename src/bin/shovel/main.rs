@@ -6,7 +6,7 @@ mod util;
 use anyhow::Context;
 use clap;
 use clap::Parser;
-use shovel::{self, Config, Shovel};
+use shovel;
 
 use global::GlobalCommands;
 use run::Run;
@@ -26,7 +26,7 @@ struct Args {
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
-    let config: Config = match args.config {
+    let config: shovel::Config = match args.config {
         Some(config_path) => {
             // Read the config file.
             shovel::json_from_file(&config_path)
@@ -35,7 +35,7 @@ fn main() -> anyhow::Result<()> {
         None => Default::default(),
     };
 
-    let mut shovel = Shovel::new(config)?;
+    let mut shovel = shovel::Shovel::new(config)?;
 
     // Delegate to sub-commands.
     args.commands.run(&mut shovel)

@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path;
 
 use crate::app::App;
 use crate::error::{Error, Result};
@@ -19,7 +19,7 @@ use crate::util::list_dir;
 ///     * `current` -> `0.2.0`
 ///   * `...`
 pub struct Apps {
-    dir: PathBuf,
+    dir: path::PathBuf,
 }
 
 impl Apps {
@@ -30,7 +30,7 @@ impl Apps {
     /// * `dir` - The directory where apps are stored.
     pub fn new<P>(dir: P) -> Self
     where
-        P: AsRef<Path>,
+        P: AsRef<path::Path>,
     {
         Self {
             dir: dir.as_ref().to_owned(),
@@ -55,7 +55,7 @@ impl Apps {
     ///
     /// * `name` - The name of the app.
     /// * `version` - The version of the app.
-    pub fn path(&self, name: &str, version: &str) -> Option<PathBuf> {
+    pub fn path(&self, name: &str, version: &str) -> Option<path::PathBuf> {
         let mut dir = self.dir.to_owned();
         dir.extend([name, version]);
 

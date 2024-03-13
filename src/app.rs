@@ -1,6 +1,5 @@
 pub mod app;
 pub mod apps;
-pub mod macros;
 pub mod manifest;
 pub mod metadata;
 

@@ -1,9 +1,9 @@
-use std::ffi::OsStr;
-use std::fs::{self, File};
-use std::io::{BufReader, Result as IOResult};
-use std::path::Path;
+use std::ffi;
+use std::fs;
+use std::io;
+use std::path;
 
-use serde::de::DeserializeOwned;
+use serde::de;
 use serde_json;
 
 use crate::error::Result;
@@ -13,7 +13,7 @@ use crate::error::Result;
 /// # Arguments
 ///
 /// * `osstr` - The OsStr to convert.
-pub fn osstr_to_string(osstr: &OsStr) -> String {
+pub fn osstr_to_string(osstr: &ffi::OsStr) -> String {
     osstr.to_str().unwrap().to_owned()
 }
 
@@ -24,32 +24,40 @@ pub fn osstr_to_string(osstr: &OsStr) -> String {
 /// * `path` - The path to the JSON file.
 pub fn json_from_file<P, T>(path: P) -> Result<T>
 where
-    P: AsRef<Path>,
-    T: DeserializeOwned,
+    P: AsRef<path::Path>,
+    T: de::DeserializeOwned,
 {
-    let file = File::open(path)?;
+    let file = fs::File::open(path)?;
 
-    let reader = BufReader::new(file);
+    let reader = io::BufReader::new(file);
     let value_t = serde_json::from_reader(reader)?;
 
     Ok(value_t)
 }
 
-/// List all directories in a path by their final component.
 ///
 /// # Arguments
 ///
 /// * `path` - The path.
 pub fn list_dir<P>(path: P) -> Result<impl Iterator<Item = String>>
 where
-    P: AsRef<Path>,
+    P: AsRef<path::Path>,
 {
     // Collect the first error.
-    let entries: IOResult<Vec<_>> = fs::read_dir(path)?.collect();
+    let entries: io::Result<Vec<_>> = fs::read_dir(path)?.collect();
 
-    Ok(entries?
+    let dirs = entries?
         .into_iter()
-        .map(|e| e.path())
-        .filter(|p| p.is_dir())
-        .map(|p| osstr_to_string(p.file_name().unwrap())))
+        .filter_map(|e| {
+            let p = e.path();
+
+            if p.is_dir() {
+                Some(p)
+            } else {
+                None
+            }
+        })
+        .map(|p| osstr_to_string(p.file_name().unwrap()));
+
+    Ok(dirs)
 }

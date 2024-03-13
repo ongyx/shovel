@@ -1,17 +1,17 @@
 use std::collections::HashMap;
 
-use crate::app::macros::{json_enum, json_enum_key, json_struct};
+use serde;
+use serde::de;
+use serde_with;
 
-use serde::de::DeserializeOwned;
-use serde::Serialize;
-use serde_with::OneOrMany;
+use crate::json::{json_enum, json_enum_key, json_struct};
 
 json_struct! {
     /// A list represented as a single element by itself or multiple elements.
     #[serde(transparent)]
     pub struct List<T>
-    where T: Serialize + DeserializeOwned {
-        #[serde_as(as = "OneOrMany<_>")]
+    where T: serde::Serialize + de::DeserializeOwned {
+        #[serde_as(as = "serde_with::OneOrMany<_>")]
         pub items: Vec<T>,
     }
 }

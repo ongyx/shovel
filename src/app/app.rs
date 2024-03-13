@@ -1,5 +1,5 @@
-use std::io::ErrorKind;
-use std::path::{Path, PathBuf};
+use std::io;
+use std::path;
 
 use crate::app::{Manifest, Metadata};
 use crate::error::{Error, Result};
@@ -11,7 +11,7 @@ use crate::util::json_from_file;
 /// * `manifest.json` - The app's manifest at the time of installation.
 /// * `install.json` - The app's install metadata, describing its architecture type and the bucket it came from.
 pub struct App {
-    dir: PathBuf,
+    dir: path::PathBuf,
 }
 
 impl App {
@@ -22,7 +22,7 @@ impl App {
     /// * `dir` - The path to the app. It must point to a directory.
     pub fn open<P>(dir: P) -> Self
     where
-        P: AsRef<Path>,
+        P: AsRef<path::Path>,
     {
         Self {
             dir: dir.as_ref().to_owned(),
@@ -30,12 +30,12 @@ impl App {
     }
 
     /// Returns the app directory.
-    pub fn dir(&self) -> &Path {
+    pub fn dir(&self) -> &path::Path {
         &self.dir
     }
 
     /// Returns the path to the app's manifest, or None if it does not exist.
-    pub fn manifest_path(&self) -> Option<PathBuf> {
+    pub fn manifest_path(&self) -> Option<path::PathBuf> {
         let path = self.dir().join("manifest.json");
 
         if path.exists() {
@@ -57,7 +57,7 @@ impl App {
     }
 
     /// Returns the path to the app's metadata.
-    pub fn metadata_path(&self) -> PathBuf {
+    pub fn metadata_path(&self) -> path::PathBuf {
         self.dir().join("install.json")
     }
 
@@ -70,7 +70,7 @@ impl App {
         let path = self.metadata_path();
 
         json_from_file(&path).map_err(|err| match err {
-            Error::IO(ioerr) if ioerr.kind() == ErrorKind::NotFound => Error::MetadataNotFound,
+            Error::IO(ioerr) if ioerr.kind() == io::ErrorKind::NotFound => Error::MetadataNotFound,
             _ => err,
         })
     }

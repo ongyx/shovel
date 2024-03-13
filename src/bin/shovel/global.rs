@@ -1,18 +1,19 @@
 use std::fs;
-use std::time::UNIX_EPOCH;
+use std::time;
 
-use anyhow::{bail, Context};
-use clap::{Args, Subcommand};
+use anyhow;
+use anyhow::Context;
+use clap;
 use regex;
-use shovel::app::manifest::{Bin, Bins};
-use shovel::{App, Manifest, Result, Shovel};
-use tabled::Tabled;
+use shovel;
+use shovel::app::manifest;
+use tabled;
 
 use crate::bucket::BucketCommands;
 use crate::run::Run;
 use crate::util::{parse_app, tableify, unix_to_human};
 
-#[derive(Subcommand)]
+#[derive(clap::Subcommand)]
 pub enum GlobalCommands {
     /// Manage buckets
     #[command(subcommand)]
@@ -29,7 +30,7 @@ pub enum GlobalCommands {
 }
 
 impl Run for GlobalCommands {
-    fn run(&self, shovel: &mut Shovel) -> anyhow::Result<()> {
+    fn run(&self, shovel: &mut shovel::Shovel) -> anyhow::Result<()> {
         match self {
             Self::Bucket(cmds) => cmds.run(shovel),
             Self::Cat(cmd) => cmd.run(shovel),
@@ -39,14 +40,14 @@ impl Run for GlobalCommands {
     }
 }
 
-#[derive(Args)]
+#[derive(clap::Args)]
 pub struct CatCommand {
     /// The app's name. To specify a bucket, use the syntax `bucket/app`.
     app: String,
 }
 
 impl Run for CatCommand {
-    fn run(&self, shovel: &mut Shovel) -> anyhow::Result<()> {
+    fn run(&self, shovel: &mut shovel::Shovel) -> anyhow::Result<()> {
         let (bucket, app) = parse_app(&self.app);
 
         let apps: Vec<_> = shovel
@@ -56,7 +57,7 @@ impl Run for CatCommand {
             .collect();
 
         match apps.len() {
-            0 => bail!("App not found."),
+            0 => anyhow::bail!("App not found."),
             _ => {
                 if apps.len() > 1 {
                     println!(
@@ -76,7 +77,7 @@ impl Run for CatCommand {
     }
 }
 
-#[derive(Tabled)]
+#[derive(tabled::Tabled)]
 #[tabled(rename_all = "pascal")]
 pub struct ListInfo {
     name: String,
@@ -86,7 +87,7 @@ pub struct ListInfo {
 }
 
 impl ListInfo {
-    fn new(name: &str, app: &App) -> Result<Self> {
+    fn new(name: &str, app: &shovel::App) -> shovel::Result<Self> {
         let manifest = app.manifest()?;
         let metadata = app.metadata()?;
 
@@ -97,7 +98,7 @@ impl ListInfo {
             .dir()
             .metadata()?
             .modified()?
-            .duration_since(UNIX_EPOCH)
+            .duration_since(time::UNIX_EPOCH)
             .unwrap()
             .as_secs();
         let updated = unix_to_human(updated_ts as i64);
@@ -111,14 +112,14 @@ impl ListInfo {
     }
 }
 
-#[derive(Args)]
+#[derive(clap::Args)]
 pub struct ListCommand {
     /// The apps to list as a regex. To specify a bucket, use the syntax `bucket/pattern`.
     query: Option<String>,
 }
 
 impl Run for ListCommand {
-    fn run(&self, shovel: &mut Shovel) -> anyhow::Result<()> {
+    fn run(&self, shovel: &mut shovel::Shovel) -> anyhow::Result<()> {
         let query = match &self.query {
             Some(q) => q,
             None => "",
@@ -163,7 +164,7 @@ impl Run for ListCommand {
             .collect();
 
         match apps.len() {
-            0 => bail!("No app(s) found."),
+            0 => anyhow::bail!("No app(s) found."),
             _ => {
                 println!("\n{}\n", tableify(apps));
 
@@ -173,7 +174,7 @@ impl Run for ListCommand {
     }
 }
 
-#[derive(Tabled)]
+#[derive(tabled::Tabled)]
 #[tabled(rename_all = "pascal")]
 struct SearchInfo {
     name: String,
@@ -183,7 +184,9 @@ struct SearchInfo {
 }
 
 impl SearchInfo {
-    fn new(bucket: String, name: String, manifest: &Manifest) -> Self {
+    fn new(bucket: String, name: String, manifest: &shovel::Manifest) -> Self {
+        use manifest::{Bin, Bins};
+
         let version = manifest.version.clone();
         let binaries = match &manifest.common.bin {
             Some(bins) => match bins {
@@ -218,19 +221,19 @@ impl SearchInfo {
     }
 }
 
-#[derive(Args)]
+#[derive(clap::Args)]
 pub struct SearchCommand {
     /// The apps to search as a regex. To specify a bucket, use the syntax `bucket/pattern`.
     query: String,
 }
 
 impl Run for SearchCommand {
-    fn run(&self, shovel: &mut Shovel) -> anyhow::Result<()> {
+    fn run(&self, shovel: &mut shovel::Shovel) -> anyhow::Result<()> {
         let (bucket, app) = parse_app(&self.query);
 
         let regex = regex::Regex::new(app).context("Invalid pattern")?;
 
-        let apps: Result<Vec<_>> = shovel
+        let apps: shovel::Result<Vec<_>> = shovel
             .buckets
             .search(|b, a| (bucket.is_empty() || b == bucket) && regex.is_match(a))
             .context("Search failed")?
@@ -245,7 +248,7 @@ impl Run for SearchCommand {
         let apps = apps?;
 
         match apps.len() {
-            0 => bail!("No app(s) found."),
+            0 => anyhow::bail!("No app(s) found."),
             _ => {
                 println!("\n{}\n", tableify(apps));
 

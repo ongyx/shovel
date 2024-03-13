@@ -1,5 +1,5 @@
-use crate::app::macros::json_struct;
 use crate::app::manifest::Arch;
+use crate::json::json_struct;
 
 json_struct! {
     /// Metadata on an installed app.

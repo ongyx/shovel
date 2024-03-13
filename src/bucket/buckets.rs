@@ -1,8 +1,8 @@
-use std::collections::hash_map::Entry;
-use std::collections::HashMap;
+use std::collections;
+use std::collections::hash_map;
 use std::fs;
 use std::iter;
-use std::path::{Path, PathBuf};
+use std::path;
 
 use crate::bucket::Bucket;
 use crate::error::{Error, Result};
@@ -16,8 +16,8 @@ use crate::util::list_dir;
 ///   * `bucket2`
 ///   * `...`
 pub struct Buckets {
-    dir: PathBuf,
-    map: HashMap<String, Bucket>,
+    dir: path::PathBuf,
+    map: collections::HashMap<String, Bucket>,
 }
 
 impl Buckets {
@@ -28,11 +28,11 @@ impl Buckets {
     /// * `dir` - The directory where buckets are stored.
     pub fn new<P>(dir: P) -> Self
     where
-        P: AsRef<Path>,
+        P: AsRef<path::Path>,
     {
         Self {
             dir: dir.as_ref().to_owned(),
-            map: HashMap::new(),
+            map: collections::HashMap::new(),
         }
     }
 
@@ -42,7 +42,7 @@ impl Buckets {
     }
 
     /// Returns the path to a bucket, or None if it does not exist.
-    pub fn path(&self, name: &str) -> Option<PathBuf> {
+    pub fn path(&self, name: &str) -> Option<path::PathBuf> {
         let path = self.dir.join(name);
 
         if path.exists() {
@@ -62,6 +62,8 @@ impl Buckets {
     ///
     /// If the bucket does not exist, `Error::BucketNotFound` is returned.
     pub fn get(&mut self, name: &str) -> Result<&mut Bucket> {
+        use hash_map::Entry;
+
         // Make sure the bucket still exists.
         let dir = self.path(name).ok_or(Error::BucketNotFound)?;
 

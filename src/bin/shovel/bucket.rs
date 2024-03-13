@@ -1,17 +1,17 @@
-use anyhow::{bail, Context, Result};
-use clap::{Args, Subcommand};
+use anyhow;
+use anyhow::{bail, Context};
+use clap;
 use colored::Colorize;
-use phf::phf_map;
-use shovel::{Bucket, Result as ShovelResult, Shovel};
-
-use tabled::Tabled;
+use phf;
+use shovel;
+use tabled;
 
 use crate::run::Run;
 use crate::util::{tableify, unix_to_human};
 
 /// Map of known bucket names to their URLs.
 /// Derived from https://github.com/ScoopInstaller/Scoop/blob/master/buckets.json
-static KNOWN_BUCKETS: phf::Map<&'static str, &'static str> = phf_map! {
+static KNOWN_BUCKETS: phf::Map<&'static str, &'static str> = phf::phf_map! {
     "main" => "https://github.com/ScoopInstaller/Main",
     "extras" => "https://github.com/ScoopInstaller/Extras",
     "versions" => "https://github.com/ScoopInstaller/Versions",
@@ -29,7 +29,7 @@ fn known_bucket(name: &str) -> Option<&'static str> {
     KNOWN_BUCKETS.get(name).map(|u| *u)
 }
 
-#[derive(Subcommand)]
+#[derive(clap::Subcommand)]
 pub enum BucketCommands {
     /// Add a bucket
     Add(AddCommand),
@@ -49,7 +49,7 @@ pub enum BucketCommands {
 }
 
 impl Run for BucketCommands {
-    fn run(&self, shovel: &mut Shovel) -> Result<()> {
+    fn run(&self, shovel: &mut shovel::Shovel) -> anyhow::Result<()> {
         match self {
             Self::Add(cmd) => cmd.run(shovel),
             Self::Remove(cmd) => cmd.run(shovel),
@@ -60,7 +60,7 @@ impl Run for BucketCommands {
     }
 }
 
-#[derive(Args)]
+#[derive(clap::Args)]
 pub struct AddCommand {
     /// The bucket name.
     name: String,
@@ -71,7 +71,7 @@ pub struct AddCommand {
 }
 
 impl Run for AddCommand {
-    fn run(&self, shovel: &mut Shovel) -> anyhow::Result<()> {
+    fn run(&self, shovel: &mut shovel::Shovel) -> anyhow::Result<()> {
         let url = self
             .url
             .as_ref()
@@ -94,14 +94,14 @@ impl Run for AddCommand {
     }
 }
 
-#[derive(Args)]
+#[derive(clap::Args)]
 pub struct RemoveCommand {
     /// The existing bucket's name.
     name: String,
 }
 
 impl Run for RemoveCommand {
-    fn run(&self, shovel: &mut Shovel) -> anyhow::Result<()> {
+    fn run(&self, shovel: &mut shovel::Shovel) -> anyhow::Result<()> {
         shovel
             .buckets
             .remove(&self.name)
@@ -113,7 +113,7 @@ impl Run for RemoveCommand {
     }
 }
 
-#[derive(Tabled)]
+#[derive(tabled::Tabled)]
 #[tabled(rename_all = "pascal")]
 struct BucketInfo {
     name: String,
@@ -123,7 +123,7 @@ struct BucketInfo {
 }
 
 impl BucketInfo {
-    fn new(bucket: &Bucket) -> ShovelResult<Self> {
+    fn new(bucket: &shovel::Bucket) -> shovel::Result<Self> {
         let name = bucket.name();
         let source = bucket.origin()?;
         let updated = unix_to_human(bucket.timestamp()?);
@@ -138,14 +138,14 @@ impl BucketInfo {
     }
 }
 
-#[derive(Args)]
+#[derive(clap::Args)]
 pub struct ListCommand {}
 
 impl ListCommand {}
 
 impl Run for ListCommand {
-    fn run(&self, shovel: &mut Shovel) -> Result<()> {
-        let info: ShovelResult<Vec<_>> = shovel
+    fn run(&self, shovel: &mut shovel::Shovel) -> anyhow::Result<()> {
+        let info: shovel::Result<Vec<_>> = shovel
             .buckets
             .iter()?
             .map(|n| shovel.buckets.get(&n).and_then(|b| BucketInfo::new(b)))
@@ -157,18 +157,18 @@ impl Run for ListCommand {
     }
 }
 
-#[derive(Tabled)]
+#[derive(tabled::Tabled)]
 #[tabled(rename_all = "pascal")]
 struct KnownInfo {
     name: &'static str,
     source: &'static str,
 }
 
-#[derive(Args)]
+#[derive(clap::Args)]
 pub struct KnownCommand {}
 
 impl Run for KnownCommand {
-    fn run(&self, _shovel: &mut Shovel) -> anyhow::Result<()> {
+    fn run(&self, _shovel: &mut shovel::Shovel) -> anyhow::Result<()> {
         let known = KNOWN_BUCKETS
             .into_iter()
             .map(|(name, source)| KnownInfo { name, source });
@@ -179,14 +179,14 @@ impl Run for KnownCommand {
     }
 }
 
-#[derive(Args)]
+#[derive(clap::Args)]
 pub struct VerifyCommand {
     /// The bucket to verify apps for. If not specified, all buckets are verified.
     bucket: Option<String>,
 }
 
 impl VerifyCommand {
-    fn verify(&self, shovel: &mut Shovel, bucket_name: &str) -> Result<(i32, i32)> {
+    fn verify(&self, shovel: &mut shovel::Shovel, bucket_name: &str) -> anyhow::Result<(i32, i32)> {
         let bucket = shovel.buckets.get(bucket_name)?;
 
         let mut success = 0;
@@ -215,7 +215,7 @@ impl VerifyCommand {
 }
 
 impl Run for VerifyCommand {
-    fn run(&self, shovel: &mut Shovel) -> Result<()> {
+    fn run(&self, shovel: &mut shovel::Shovel) -> anyhow::Result<()> {
         let bucket_names = match &self.bucket {
             Some(name) => vec![name.to_owned()],
             None => shovel.buckets.iter()?.collect(),
