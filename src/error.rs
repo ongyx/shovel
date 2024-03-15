@@ -15,13 +15,17 @@ pub enum Error {
     #[error("Bucket already exists")]
     BucketExists,
 
-    /// An app version does not exist.
-    #[error("App version not found")]
-    AppVersionNotFound,
-
     /// An app manifest does not exist.
     #[error("Manifest not found")]
     ManifestNotFound,
+
+    /// An app manifest is not commited.
+    #[error("Manifest not commited in Git repository")]
+    ManifestNotCommited,
+
+    /// An app does not exist.
+    #[error("App not found")]
+    AppNotFound,
 
     /// An app's metadata does not exist.
     #[error("Metadata not found")]

@@ -4,8 +4,8 @@ use std::path;
 
 use git2;
 
-use crate::app::Manifest;
 use crate::error::{Error, Result};
+use crate::manifest::Manifest;
 use crate::util::{json_from_file, osstr_to_string};
 
 /// A collection of app manifests in a Git repository.
@@ -69,12 +69,12 @@ impl Bucket {
         Ok(origin.url().unwrap_or("").to_owned())
     }
 
-    /// Returns the UNIX timestamp in seconds for the last commit in the bucket.
-    pub fn timestamp(&self) -> Result<i64> {
+    /// Returns the last commit in the bucket.
+    pub fn commit(&self) -> Result<git2::Commit> {
         let head = self.repo.head()?;
         let commit = head.peel_to_commit()?;
 
-        Ok(commit.time().seconds())
+        Ok(commit)
     }
 
     /// Returns an iterator over all app manifests by name.
@@ -112,5 +112,67 @@ impl Bucket {
             Error::IO(ioerr) if ioerr.kind() == io::ErrorKind::NotFound => Error::ManifestNotFound,
             _ => err,
         })
+    }
+
+    /// Returns the last commit made to a manifest.
+    ///
+    /// If the manifest has not been commited, None is returned.
+    pub fn manifest_commit(&self, name: &str) -> Result<git2::Commit> {
+        let path = self.manifest_path(name);
+
+        // Ensure the manifest exists.
+        if !path.exists() {
+            return Err(Error::ManifestNotFound);
+        }
+
+        // SAFETY: path is always a child of dir.
+        let relpath = path.strip_prefix(&self.dir).unwrap();
+
+        // Ensure the manifest is commited.
+        if !self.is_commited(relpath)? {
+            return Err(Error::ManifestNotCommited);
+        }
+
+        let commit = self.find(relpath)?;
+
+        Ok(commit.expect("Manifest is commited"))
+    }
+
+    fn find(&self, path: &path::Path) -> Result<Option<git2::Commit>> {
+        let mut revwalk = self.repo.revwalk()?;
+        revwalk.set_sorting(git2::Sort::TIME)?;
+        revwalk.push_head()?;
+
+        let mut old_tree: Option<git2::Tree> = None;
+
+        for oid in revwalk {
+            let commit = self.repo.find_commit(oid?)?;
+            let tree = Some(commit.tree()?);
+
+            let diff = self
+                .repo
+                .diff_tree_to_tree(old_tree.as_ref(), tree.as_ref(), None)?;
+
+            let has_file = diff.deltas().any(|delta| {
+                // SAFETY: Okay as long as the path is UTF-8.
+                let delta_path = delta.new_file().path().unwrap();
+
+                delta_path == path
+            });
+
+            if has_file {
+                return Ok(Some(commit));
+            }
+
+            old_tree = tree;
+        }
+
+        Ok(None)
+    }
+
+    fn is_commited(&self, path: &path::Path) -> Result<bool> {
+        let status = self.repo.status_file(path)?;
+
+        Ok(!(status.contains(git2::Status::WT_NEW) || status.contains(git2::Status::INDEX_NEW)))
     }
 }

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt;
 
 use serde;
 use serde::de;
@@ -33,6 +34,20 @@ json_enum! {
 impl Default for License {
     fn default() -> Self {
         Self::ID("Unknown".to_owned())
+    }
+}
+
+impl fmt::Display for License {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::ID(id) => write!(f, "{}", id),
+            Self::Extended { identifier, url } => match (identifier, url) {
+                (Some(id), Some(url)) => write!(f, "{} ({})", id, url),
+                (Some(id), _) => write!(f, "{}", id),
+                (_, Some(url)) => write!(f, "{}", url),
+                (_, _) => Ok(()),
+            },
+        }
     }
 }
 
@@ -145,6 +160,31 @@ json_struct! {
     }
 }
 
+impl fmt::Display for Shortcut {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let exe = self.executable.as_str();
+        // Despite the name, this is a String and not a Vec.
+        let args = self
+            .arguments
+            .as_ref()
+            .map(|arg| arg.as_str())
+            .unwrap_or_default();
+
+        let cmd = vec![exe, args];
+
+        write!(
+            f,
+            "{} ({}) => {}",
+            self.name,
+            self.icon
+                .as_ref()
+                .map(|icon| icon.as_str())
+                .unwrap_or_default(),
+            cmd.join(" "),
+        )
+    }
+}
+
 impl TryFrom<Vec<String>> for Shortcut {
     type Error = &'static str;
 
@@ -218,6 +258,18 @@ impl From<Shim> for Vec<String> {
     }
 }
 
+impl fmt::Display for Shim {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut cmd = vec![self.executable.as_str()];
+
+        // Add the arguments to the command.
+        let args = self.arguments.iter().map(|arg| arg.as_str());
+        cmd.extend(args);
+
+        write!(f, "{}", cmd.join(" "))
+    }
+}
+
 json_enum! {
     /// An executable to add to the user's path.
     pub enum Bin {
@@ -226,6 +278,15 @@ json_enum! {
 
         /// A shim consisting of a path to an executable, and arguments to pass to the executable.
         Shim(Shim),
+    }
+}
+
+impl fmt::Display for Bin {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Path(path) => write!(f, "{}", path),
+            Self::Shim(shim) => write!(f, "{}", shim),
+        }
     }
 }
 
@@ -240,6 +301,21 @@ json_enum! {
 
         /// Multiple executables.
         Many(Vec<Bin>),
+    }
+}
+
+impl fmt::Display for Bins {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use Bins::*;
+
+        match self {
+            One(bin) => write!(f, "{}", bin),
+            Many(bins) => {
+                let bins: Vec<String> = bins.iter().map(|bin| bin.to_string()).collect();
+
+                write!(f, "{}", bins.join(" | "))
+            }
+        }
     }
 }
 
@@ -451,7 +527,7 @@ json_struct! {
 }
 
 json_struct! {
-    /// An app manifest, containing its metadata and installation instructions.
+    /// A manifest for an app, containing its metadata and installation instructions.
     ///
     /// For specifics, see https://github.com/ScoopInstaller/Scoop/wiki/App-Manifests
     pub struct Manifest {

@@ -2,12 +2,14 @@ use std::ffi;
 use std::fs;
 use std::io;
 use std::path;
+use std::time;
 
 use serde::de;
 use serde_json;
 use serde_path_to_error;
 
 use crate::error::Result;
+use crate::timestamp::Timestamp;
 
 /// Converts an OsStr to a String.
 ///
@@ -63,4 +65,21 @@ where
         .map(|p| osstr_to_string(p.file_name().unwrap()));
 
     Ok(dirs)
+}
+
+/// Returns the modification time of a path as a UNIX timestamp.
+pub fn mod_time<P>(path: P) -> Result<Timestamp>
+where
+    P: AsRef<path::Path>,
+{
+    let timestamp = path
+        .as_ref()
+        .metadata()?
+        .modified()?
+        // https://doc.rust-lang.org/std/time/struct.SystemTime.html#associatedconstant.UNIX_EPOCH
+        .duration_since(time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    Ok(Timestamp(timestamp as i64))
 }

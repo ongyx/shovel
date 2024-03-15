@@ -1,17 +1,15 @@
 use std::fs;
-use std::time;
+use std::iter;
 
 use clap;
-use eyre;
-use eyre::WrapErr;
+use eyre::{self, WrapErr};
 use regex;
 use shovel;
-use shovel::app::manifest;
 use tabled;
 
 use crate::bucket::BucketCommands;
 use crate::run::Run;
-use crate::util::{parse_app, tableify, unix_to_human};
+use crate::util::{parse_app, tableify};
 
 #[derive(clap::Subcommand)]
 pub enum GlobalCommands {
@@ -21,6 +19,9 @@ pub enum GlobalCommands {
 
     /// Show an app's manifest
     Cat(CatCommand),
+
+    /// Show an app's info
+    Info(InfoCommand),
 
     /// List installed apps
     List(ListCommand),
@@ -34,6 +35,7 @@ impl Run for GlobalCommands {
         match self {
             Self::Bucket(cmds) => cmds.run(shovel),
             Self::Cat(cmd) => cmd.run(shovel),
+            Self::Info(cmd) => cmd.run(shovel),
             Self::List(cmd) => cmd.run(shovel),
             Self::Search(cmd) => cmd.run(shovel),
         }
@@ -77,6 +79,91 @@ impl Run for CatCommand {
     }
 }
 
+#[derive(tabled::Tabled, Debug)]
+#[tabled(rename_all = "pascal")]
+struct Info {
+    name: String,
+    description: String,
+    version: String,
+    bucket: String,
+    website: String,
+    license: String,
+    #[tabled(rename = "Updated at")]
+    updated_at: String,
+    #[tabled(rename = "Updated by")]
+    updated_by: String,
+    installed: String,
+    binaries: String,
+    shortcuts: String,
+}
+
+impl Info {
+    fn new(name: &str, bucket: &shovel::Bucket, app: &shovel::App) -> shovel::Result<Self> {
+        let manifest = bucket.manifest(name)?;
+
+        let description = manifest.description.unwrap_or_default();
+        let version = manifest.version;
+        let website = manifest.homepage;
+        let license = manifest.license.to_string();
+        let commit = bucket.manifest_commit(name)?;
+        let updated_at = shovel::Timestamp::from(commit.time()).to_string();
+        let updated_by = commit.author().name().unwrap().to_owned();
+        let installed = app.manifest()?.version;
+        let binaries = manifest
+            .common
+            .bin
+            .map(|bins| bins.to_string())
+            .unwrap_or_default();
+        let shortcuts = manifest
+            .common
+            .shortcuts
+            .map(|shortcuts| {
+                let shortcuts: Vec<_> = shortcuts
+                    .iter()
+                    .map(|shortcut| shortcut.to_string())
+                    .collect();
+
+                shortcuts.join(" | ")
+            })
+            .unwrap_or_default();
+
+        Ok(Self {
+            name: name.to_owned(),
+            description,
+            version,
+            bucket: bucket.name(),
+            website,
+            license,
+            updated_at,
+            updated_by,
+            installed,
+            binaries,
+            shortcuts,
+        })
+    }
+}
+
+#[derive(clap::Args)]
+pub struct InfoCommand {
+    pub app: String,
+}
+
+impl Run for InfoCommand {
+    fn run(&self, shovel: &mut shovel::Shovel) -> eyre::Result<()> {
+        let app = shovel.apps.get_current(&self.app)?;
+        let metadata = app.metadata()?;
+        let bucket = shovel.buckets.get(&metadata.bucket)?;
+
+        let info = Info::new(&self.app, bucket, &app)?;
+
+        let table = tableify(iter::once(info), true);
+
+        println!("\n{}\n", table);
+
+        Ok(())
+    }
+}
+
 #[derive(tabled::Tabled, Default)]
 #[tabled(rename_all = "pascal")]
 struct ListInfo {
@@ -94,15 +181,7 @@ impl ListInfo {
 
         let version = manifest.version;
         let bucket = metadata.bucket;
-        // https://doc.rust-lang.org/std/time/struct.SystemTime.html#associatedconstant.UNIX_EPOCH
-        let updated_ts = app
-            .dir()
-            .metadata()?
-            .modified()?
-            .duration_since(time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-        let updated = unix_to_human(updated_ts as i64);
+        let updated = app.timestamp()?.to_string();
 
         Ok(Self {
             name: name.to_owned(),
@@ -167,7 +246,7 @@ impl Run for ListCommand {
         match apps.len() {
             0 => eyre::bail!("No app(s) found."),
             _ => {
-                println!("\n{}\n", tableify(apps));
+                println!("\n{}\n", tableify(apps, false));
 
                 Ok(())
             }
@@ -186,32 +265,13 @@ struct SearchInfo {
 
 impl SearchInfo {
     fn new(bucket: String, name: String, manifest: &shovel::Manifest) -> Self {
-        use manifest::{Bin, Bins};
-
         let version = manifest.version.clone();
-        let binaries = match &manifest.common.bin {
-            Some(bins) => match bins {
-                Bins::One(p) => p.clone(),
-                Bins::Many(ps) => {
-                    let bins: Vec<String> = ps
-                        .iter()
-                        .map(|b| match b {
-                            Bin::Path(p) => p.clone(),
-                            Bin::Shim(s) => {
-                                let cmd = [vec![s.executable.clone()], s.arguments.clone()]
-                                    .concat()
-                                    .join(" ");
-
-                                format!("{} => {}", s.name, cmd)
-                            }
-                        })
-                        .collect();
-
-                    bins.join(" | ")
-                }
-            },
-            None => "".to_owned(),
-        };
+        let binaries = manifest
+            .common
+            .bin
+            .as_ref()
+            .map(|bins| bins.to_string())
+            .unwrap_or_default();
 
         SearchInfo {
             name,
@@ -251,7 +311,7 @@ impl Run for SearchCommand {
         match apps.len() {
             0 => eyre::bail!("No app(s) found."),
             _ => {
-                println!("\n{}\n", tableify(apps));
+                println!("\n{}\n", tableify(apps, false));
 
                 Ok(())
             }

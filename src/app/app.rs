@@ -1,9 +1,11 @@
 use std::io;
 use std::path;
 
-use crate::app::{Manifest, Metadata};
+use crate::app::Metadata;
 use crate::error::{Error, Result};
-use crate::util::json_from_file;
+use crate::manifest::Manifest;
+use crate::timestamp::Timestamp;
+use crate::util::{json_from_file, mod_time};
 
 /// An installed app in a directory.
 ///
@@ -32,6 +34,11 @@ impl App {
     /// Returns the app directory.
     pub fn dir(&self) -> &path::Path {
         &self.dir
+    }
+
+    /// Returns the last modified time of the app as a UNIX timestamp.
+    pub fn timestamp(&self) -> Result<Timestamp> {
+        mod_time(self.dir())
     }
 
     /// Returns the path to the app's manifest, or None if it does not exist.

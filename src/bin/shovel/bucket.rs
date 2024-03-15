@@ -7,7 +7,7 @@ use shovel;
 use tabled;
 
 use crate::run::Run;
-use crate::util::{tableify, unix_to_human};
+use crate::util::tableify;
 
 /// Map of known bucket names to their URLs.
 /// Derived from https://github.com/ScoopInstaller/Scoop/blob/master/buckets.json
@@ -126,7 +126,8 @@ impl BucketInfo {
     fn new(bucket: &shovel::Bucket) -> shovel::Result<Self> {
         let name = bucket.name();
         let source = bucket.origin()?;
-        let updated = unix_to_human(bucket.timestamp()?);
+        let commit = bucket.commit()?;
+        let updated = shovel::Timestamp::from(commit.time()).to_string();
         let manifests = bucket.manifests()?.count();
 
         Ok(Self {
@@ -151,7 +152,7 @@ impl Run for ListCommand {
             .map(|n| shovel.buckets.get(&n).and_then(|b| BucketInfo::new(b)))
             .collect();
 
-        println!("\n{}\n", tableify(info?));
+        println!("\n{}\n", tableify(info?, false));
 
         Ok(())
     }
@@ -173,7 +174,7 @@ impl Run for KnownCommand {
             .into_iter()
             .map(|(name, source)| KnownInfo { name, source });
 
-        println!("\n{}\n", tableify(known));
+        println!("\n{}\n", tableify(known, false));
 
         Ok(())
     }
