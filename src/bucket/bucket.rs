@@ -176,3 +176,33 @@ impl Bucket {
         Ok(!(status.contains(git2::Status::WT_NEW) || status.contains(git2::Status::INDEX_NEW)))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use git2;
+    use tempfile;
+
+    use super::*;
+
+    #[test]
+    fn bucket_name() {
+        let name = "this is a bucket";
+        let (temp_dir, _) = create_repo(name);
+
+        let bucket = Bucket::open(&temp_dir).unwrap();
+
+        assert_eq!(bucket.name(), name);
+    }
+
+    fn create_repo(name: &str) -> (tempfile::TempDir, git2::Repository) {
+        let temp_dir = tempfile::Builder::new()
+            // Disable randomizing the name.
+            .rand_bytes(0)
+            .prefix(name)
+            .tempdir()
+            .unwrap();
+        let repo = git2::Repository::init(&temp_dir).unwrap();
+
+        (temp_dir, repo)
+    }
+}

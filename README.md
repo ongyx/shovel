@@ -27,6 +27,13 @@ Your mileage may vary with the GNU toolchains.
 
 ## License
 
-[MIT](./LICENSE).
+Unless attributed below, all other files are licensed under [MIT](./LICENSE).
+
+### Scoop
+
+These files are dual-licensed under [the Unlicense and MIT].
+* [buckets.json](https://github.com/ScoopInstaller/Scoop/blob/master/buckets.json)
+* [schema.json](https://github.com/ScoopInstaller/Scoop/blob/master/schema.json)
 
 [Scoop]: https://github.com/ScoopInstaller/Scoop
+[the Unlicense and MIT]: https://github.com/ScoopInstaller/Scoop/blob/master/LICENSE
