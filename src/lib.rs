@@ -7,6 +7,8 @@ pub mod shovel;
 pub mod timestamp;
 
 mod json;
+#[cfg(test)]
+mod test;
 mod util;
 
 pub use app::{App, Apps};

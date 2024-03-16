@@ -11,3 +11,6 @@ target/
 
 # Flamegraph for profiling
 flamegraph.svg
+
+# Helix editor specific configuration.
+.helix/

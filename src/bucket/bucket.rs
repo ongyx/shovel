@@ -183,6 +183,7 @@ mod tests {
     use tempfile;
 
     use super::*;
+    use crate::test::testdir;
 
     #[test]
     fn bucket_name() {
@@ -192,6 +193,14 @@ mod tests {
         let bucket = Bucket::open(&temp_dir).unwrap();
 
         assert_eq!(bucket.name(), name);
+    }
+
+    #[test]
+    fn bucket_origin() {
+        let url = "https://github.com/ScoopInstaller/Main";
+        let bucket = Bucket::open(testdir().join("buckets/main")).unwrap();
+
+        assert_eq!(bucket.origin().unwrap(), url);
     }
 
     fn create_repo(name: &str) -> (tempfile::TempDir, git2::Repository) {
