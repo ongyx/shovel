@@ -1,0 +1,30 @@
+[submodule "testdata/Main"]
+	path = testdata/buckets/main
+	url = https://github.com/ScoopInstaller/Main
+[submodule "testdata/buckets/Extras"]
+	path = testdata/buckets/extras
+	url = https://github.com/ScoopInstaller/Extras
+[submodule "testdata/buckets/Versions"]
+	path = testdata/buckets/versions
+	url = https://github.com/ScoopInstaller/Versions
+[submodule "testdata/buckets/scoop-nirsoft"]
+	path = testdata/buckets/nirsoft
+	url = https://github.com/kodybrown/scoop-nirsoft
+[submodule "testdata/buckets/scoop-sysinternals"]
+	path = testdata/buckets/sysinternals
+	url = https://github.com/niheaven/scoop-sysinternals
+[submodule "testdata/buckets/PHP"]
+	path = testdata/buckets/php
+	url = https://github.com/ScoopInstaller/PHP
+[submodule "testdata/buckets/scoop-nerd-fonts"]
+	path = testdata/buckets/nerd-fonts
+	url = https://github.com/matthewjberger/scoop-nerd-fonts
+[submodule "testdata/buckets/Nonportable"]
+	path = testdata/buckets/nonportable
+	url = https://github.com/ScoopInstaller/Nonportable
+[submodule "testdata/buckets/Java"]
+	path = testdata/buckets/java
+	url = https://github.com/ScoopInstaller/Java
+[submodule "testdata/buckets/scoop-games"]
+	path = testdata/buckets/games
+	url = https://github.com/Calinou/scoop-games
