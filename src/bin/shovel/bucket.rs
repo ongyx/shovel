@@ -2,27 +2,13 @@ use clap;
 use eyre;
 use eyre::{bail, WrapErr};
 use owo_colors::OwoColorize;
-use phf;
 use shovel;
 use tabled;
 
 use crate::run::Run;
 use crate::util::tableify;
 
-/// Map of known bucket names to their URLs.
-/// Derived from https://github.com/ScoopInstaller/Scoop/blob/master/buckets.json
-static KNOWN_BUCKETS: phf::Map<&'static str, &'static str> = phf::phf_map! {
-    "main" => "https://github.com/ScoopInstaller/Main",
-    "extras" => "https://github.com/ScoopInstaller/Extras",
-    "versions" => "https://github.com/ScoopInstaller/Versions",
-    "nirsoft" => "https://github.com/kodybrown/scoop-nirsoft",
-    "sysinternals" => "https://github.com/niheaven/scoop-sysinternals",
-    "php" => "https://github.com/ScoopInstaller/PHP",
-    "nerd-fonts" => "https://github.com/matthewjberger/scoop-nerd-fonts",
-    "nonportable" => "https://github.com/ScoopInstaller/Nonportable",
-    "java" => "https://github.com/ScoopInstaller/Java",
-    "games" => "https://github.com/Calinou/scoop-games"
-};
+include!(concat!(env!("OUT_DIR"), "/buckets.rs"));
 
 /// Returns the URL of the known bucket by name.
 fn known_bucket(name: &str) -> Option<&'static str> {

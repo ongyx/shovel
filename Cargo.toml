@@ -9,9 +9,11 @@ description = "A package manager for Windows, based off of Scoop."
 chrono = "0.4.35" 
 git2 = "0.18.2"
 home = "0.5.9"
+phf = { version = "0.11.2", features = ["macros"] }
 regex = "1.10.3"
 serde = { version = "1.0.197", features = ["derive"] }
 serde_json = "1.0.114"
+serde_path_to_error = "0.1.16"
 serde_with = "3.6.1"
 thiserror = "1.0.57"
 url = { version = "2.5.0", features = ["serde"] }
@@ -21,13 +23,16 @@ color-eyre = { version = "0.6", optional = true }
 eyre = { version = "0.6", default-features = false, features = ["auto-install", "track-caller"], optional = true }
 clap = { version = "4.5.1", features = ["derive"], optional = true }
 tabled = { version = "0.15.0", features = ["ansi"], optional = true }
-phf = { version = "0.11.2", features = ["macros"], optional = true }
 owo-colors = { version = "3.5.0", optional = true }
 terminal_size = { version = "0.3.0", optional = true}
-serde_path_to_error = "0.1.16"
+
+[build-dependencies]
+serde = { version = "1.0.197", features = ["derive"] }
+serde_json = { version = "1.0.114", features = ["preserve_order"] }
+phf_codegen = "0.11.2"
 
 [features]
-bin = ["dep:color-eyre", "dep:eyre", "dep:clap", "dep:tabled", "dep:phf", "dep:owo-colors", "dep:terminal_size"]
+bin = ["dep:color-eyre", "dep:eyre", "dep:clap", "dep:tabled", "dep:owo-colors", "dep:terminal_size"]
 
 [[bin]]
 name = "shovel"
