@@ -164,3 +164,46 @@ impl Buckets {
         Ok(self.manifests()?.filter(move |(b, m)| predicate(&b, &m)))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{fs, path::PathBuf};
+
+    use super::*;
+    use crate::test::testdir;
+
+    fn buckets_dir() -> PathBuf {
+        testdir().join("buckets")
+    }
+
+    #[test]
+    fn buckets_iter() {
+        let dir = buckets_dir();
+        let buckets = Buckets::new(&dir);
+
+        let mut names_from_buckets: Vec<_> = buckets.iter().unwrap().collect();
+        names_from_buckets.sort();
+
+        let mut names_from_fs: Vec<_> = fs::read_dir(&dir)
+            .unwrap()
+            .map(|e| e.unwrap().path())
+            .filter(|p| p.is_dir())
+            .map(|p| p.file_name().unwrap().to_str().unwrap().to_owned())
+            .collect();
+        names_from_fs.sort();
+
+        assert_eq!(names_from_buckets, names_from_fs);
+    }
+
+    #[test]
+    fn buckets_manifests() {
+        let mut buckets = Buckets::new(buckets_dir());
+
+        for (bucket, manifest) in buckets.manifests().unwrap() {
+            // Try to get the bucket...
+            let bucket = buckets.get(&bucket).unwrap();
+            // ...and parse the manifest.
+            let _manifest = bucket.manifest(&manifest).unwrap();
+        }
+    }
+}

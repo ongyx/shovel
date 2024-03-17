@@ -197,10 +197,12 @@ mod tests {
 
     #[test]
     fn bucket_origin() {
-        let url = "https://github.com/ScoopInstaller/Main";
-        let bucket = Bucket::open(testdir().join("buckets/main")).unwrap();
+        let bucket = Bucket::open(testdir().join(r"buckets\main")).unwrap();
 
-        assert_eq!(bucket.origin().unwrap(), url);
+        assert_eq!(
+            bucket.origin().unwrap(),
+            "https://github.com/ScoopInstaller/Main"
+        );
     }
 
     fn create_repo(name: &str) -> (tempfile::TempDir, git2::Repository) {
