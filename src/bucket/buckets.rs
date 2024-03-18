@@ -32,7 +32,7 @@ impl Buckets {
         }
     }
 
-    /// Returns an iterator over all buckets by name.
+    /// Yields buckets by name.
     pub fn iter(&self) -> Result<impl Iterator<Item = String> + '_> {
         subdirs(&self.dir)
     }
@@ -105,7 +105,7 @@ impl Buckets {
         }
     }
 
-    /// Returns an iterator over manifests in all buckets and yields (bucket_name, manifest_name).
+    /// Yields manifests in all buckets as a 2-tuple (bucket, manifest) by name.
     pub fn manifests(&self) -> Result<impl Iterator<Item = (String, String)>> {
         // Get manifests from each bucket.
         // Any error in opening a bucket is returned.

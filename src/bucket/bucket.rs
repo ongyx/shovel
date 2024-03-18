@@ -77,7 +77,7 @@ impl Bucket {
         Ok(commit)
     }
 
-    /// Returns an iterator over all app manifests by name.
+    /// Yields manifests by name.
     pub fn manifests(&self) -> Result<impl Iterator<Item = String>> {
         let dir = self.dir().join("bucket");
         let entries = fs::read_dir(dir)?;

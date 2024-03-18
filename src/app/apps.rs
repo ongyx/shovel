@@ -37,12 +37,12 @@ impl Apps {
         }
     }
 
-    /// Returns an iterator over all apps by name.
+    /// Yields apps by name.
     pub fn iter(&self) -> Result<impl Iterator<Item = String> + '_> {
         subdirs(&self.dir)
     }
 
-    /// Returns an iterator over an app's versions. This does not include 'current'.
+    /// Yields the installed versions for an app. This does not include 'current'.
     pub fn versions(&self, name: &str) -> Result<impl Iterator<Item = String>> {
         let path = self.dir.join(name);
 
