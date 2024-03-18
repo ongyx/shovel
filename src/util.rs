@@ -40,29 +40,29 @@ where
     Ok(value)
 }
 
+/// Yields directories in a path.
 ///
 /// # Arguments
 ///
 /// * `path` - The path.
-pub fn list_dir<P>(path: P) -> Result<impl Iterator<Item = String>>
+pub fn subdirs<P>(path: P) -> Result<impl Iterator<Item = String>>
 where
     P: AsRef<path::Path>,
 {
-    // Collect the first error.
-    let entries: io::Result<Vec<_>> = fs::read_dir(path)?.collect();
+    let dirs = fs::read_dir(path)?
+        // Discard errors.
+        .filter_map(|res| res.ok())
+        .filter_map(|entry| {
+            let path = entry.path();
 
-    let dirs = entries?
-        .into_iter()
-        .filter_map(|e| {
-            let p = e.path();
+            if path.is_dir() {
+                let name = path.file_name().unwrap();
 
-            if p.is_dir() {
-                Some(p)
+                Some(osstr_to_string(name))
             } else {
                 None
             }
-        })
-        .map(|p| osstr_to_string(p.file_name().unwrap()));
+        });
 
     Ok(dirs)
 }

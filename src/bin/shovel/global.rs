@@ -154,7 +154,7 @@ impl Run for InfoCommand {
         let metadata = app.metadata()?;
         let bucket = shovel.buckets.get(&metadata.bucket)?;
 
-        let info = Info::new(&self.app, bucket, &app)?;
+        let info = Info::new(&self.app, &bucket, &app)?;
 
         let table = tableify(iter::once(info), true);
 
@@ -200,7 +200,7 @@ pub struct ListCommand {
 }
 
 impl ListCommand {
-    fn app_info(&self, shovel: &mut shovel::Shovel, name: &str) -> ListInfo {
+    fn app_info(&self, shovel: &shovel::Shovel, name: &str) -> ListInfo {
         match shovel.apps.get_current(name) {
             Ok(app) => ListInfo::new(name, &app).unwrap_or_else(|_| ListInfo {
                 name: name.to_owned(),

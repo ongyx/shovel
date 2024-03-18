@@ -2,7 +2,7 @@ use std::path;
 
 use crate::app::App;
 use crate::error::{Error, Result};
-use crate::util::list_dir;
+use crate::util::subdirs;
 
 /// An app manager.
 ///
@@ -38,15 +38,15 @@ impl Apps {
     }
 
     /// Returns an iterator over all apps by name.
-    pub fn iter(&self) -> Result<impl Iterator<Item = String>> {
-        list_dir(self.dir.to_owned())
+    pub fn iter(&self) -> Result<impl Iterator<Item = String> + '_> {
+        subdirs(&self.dir)
     }
 
     /// Returns an iterator over an app's versions. This does not include 'current'.
     pub fn versions(&self, name: &str) -> Result<impl Iterator<Item = String>> {
         let path = self.dir.join(name);
 
-        Ok(list_dir(path)?.filter(|v| v != "current"))
+        Ok(subdirs(path)?.filter(|v| v != "current"))
     }
 
     /// Returns the path to an app, or None if it does not exist.

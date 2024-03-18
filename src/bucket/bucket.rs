@@ -82,12 +82,21 @@ impl Bucket {
         let dir = self.dir().join("bucket");
         let entries = fs::read_dir(dir)?;
 
-        Ok(entries
-            .filter_map(|r| r.ok())
-            .map(|e| e.path())
-            // Only yield files ending in .json.
-            .filter(|p| p.extension().map_or(false, |e| e == "json"))
-            .map(|p| osstr_to_string(p.file_stem().unwrap())))
+        let manifests = entries.filter_map(|res| res.ok()).filter_map(|entry| {
+            let path = entry.path();
+            let ext = path.extension().unwrap_or_default();
+
+            if ext == "json" {
+                // Take only the file stem (i.e., 'example' for 'example.json')
+                let name = path.file_stem().unwrap();
+
+                Some(osstr_to_string(name))
+            } else {
+                None
+            }
+        });
+
+        Ok(manifests)
     }
 
     /// Returns the path to an app manifest.

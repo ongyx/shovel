@@ -135,7 +135,7 @@ impl Run for ListCommand {
         let info: shovel::Result<Vec<_>> = shovel
             .buckets
             .iter()?
-            .map(|n| shovel.buckets.get(&n).and_then(|b| BucketInfo::new(b)))
+            .map(|n| shovel.buckets.get(&n).and_then(|b| BucketInfo::new(&b)))
             .collect();
 
         println!("\n{}\n", tableify(info?, false));
@@ -190,7 +190,7 @@ impl VerifyCommand {
         Ok(bucket
             .manifests()?
             // The manifest is not actually needed, so replace it with a unit value.
-            .map(|name| match bucket.manifest(&name) {
+            .map(move |name| match bucket.manifest(&name) {
                 Ok(_) => Success(name.to_owned()),
                 Err(err) => Failure(name.to_owned(), err),
             }))
