@@ -67,9 +67,9 @@ impl Run for CatCommand {
                     );
                 }
 
-                let app = &apps[0];
-                let bucket = shovel.buckets.get(&app.0)?;
-                let manifest_path = bucket.manifest_path(&app.1);
+                let (bucket, app) = &apps[0];
+                let bucket = shovel.buckets.open(bucket)?;
+                let manifest_path = bucket.manifest_path(app);
 
                 print!("{}", fs::read_to_string(manifest_path)?);
 
@@ -98,20 +98,28 @@ struct Info {
 }
 
 impl Info {
-    fn new(name: &str, bucket: &shovel::Bucket, app: &shovel::App) -> shovel::Result<Self> {
-        let manifest = bucket.manifest(name)?;
+    fn new(shovel: &mut shovel::Shovel, name: &str) -> shovel::Result<Self> {
+        use shovel::Error::AppNotFound;
 
-        let description = manifest.description.unwrap_or_default();
-        let version = manifest.version;
-        let website = manifest.homepage;
+        // TODO: cleaner API?
+        let (bucket, manifest) = shovel.buckets.manifest(name)?;
+
         let license = manifest.license.to_string();
         let commit = bucket.manifest_commit(name)?;
         let updated_at = shovel::Timestamp::from(commit.time()).to_string();
         let updated_by = commit.author().name().unwrap().to_owned();
-        let installed = app.manifest()?.version;
+
+        let app = shovel.apps.open_current(name);
+
+        let installed = match app {
+            Ok(app) => Ok(app.manifest()?.version),
+            // If the app is not found, do not propagate the error.
+            Err(AppNotFound) => Ok("(not installed)".to_owned()),
+            Err(err) => Err(err),
+        }?;
+
         let binaries = manifest
-            .common
-            .bin
+            .bin()
             .map(|bins| bins.to_string())
             .unwrap_or_default();
         let shortcuts = manifest
@@ -129,10 +137,10 @@ impl Info {
 
         Ok(Self {
             name: name.to_owned(),
-            description,
-            version,
+            description: manifest.description.unwrap_or_default(),
+            version: manifest.version,
             bucket: bucket.name(),
-            website,
+            website: manifest.homepage,
             license,
             updated_at,
             updated_by,
@@ -150,11 +158,7 @@ pub struct InfoCommand {
 
 impl Run for InfoCommand {
     fn run(&self, shovel: &mut shovel::Shovel) -> eyre::Result<()> {
-        let app = shovel.apps.get_current(&self.app)?;
-        let metadata = app.metadata()?;
-        let bucket = shovel.buckets.get(&metadata.bucket)?;
-
-        let info = Info::new(&self.app, &bucket, &app)?;
+        let info = Info::new(shovel, &self.app)?;
 
         let table = tableify(iter::once(info), true);
 
@@ -201,7 +205,7 @@ pub struct ListCommand {
 
 impl ListCommand {
     fn app_info(&self, shovel: &shovel::Shovel, name: &str) -> ListInfo {
-        match shovel.apps.get_current(name) {
+        match shovel.apps.open_current(name) {
             Ok(app) => ListInfo::new(name, &app).unwrap_or_else(|_| ListInfo {
                 name: name.to_owned(),
                 // Use placeholders if the app's manifest/metadata cannot be read.
@@ -299,7 +303,7 @@ impl Run for SearchCommand {
             .search(|b, a| (bucket.is_empty() || b == bucket) && regex.is_match(a))
             .wrap_err("Search failed")?
             .map(|(b, a)| {
-                let bucket = shovel.buckets.get(&b)?;
+                let bucket = shovel.buckets.open(&b)?;
                 let manifest = bucket.manifest(&a)?;
 
                 Ok(SearchInfo::new(b, a, &manifest))

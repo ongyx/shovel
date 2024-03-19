@@ -135,7 +135,7 @@ impl Run for ListCommand {
         let info: shovel::Result<Vec<_>> = shovel
             .buckets
             .iter()?
-            .map(|n| shovel.buckets.get(&n).and_then(|b| BucketInfo::new(&b)))
+            .map(|n| shovel.buckets.open(&n).and_then(|b| BucketInfo::new(&b)))
             .collect();
 
         println!("\n{}\n", tableify(info?, false));
@@ -185,7 +185,7 @@ impl VerifyCommand {
     ) -> eyre::Result<impl Iterator<Item = Verified> + 'sh> {
         use Verified::*;
 
-        let bucket = shovel.buckets.get(bucket_name)?;
+        let bucket = shovel.buckets.open(bucket_name)?;
         let manifests = bucket.manifests()?;
 
         let verified = manifests.map(move |name| -> Verified {
