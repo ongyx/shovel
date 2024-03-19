@@ -17,15 +17,16 @@ macro_rules! getter {
         }
 
         $(
-            /// Returns the common or architecture-specific value for the field.
+            /// Returns the architecture-specific or common value for the field in that order.
             pub fn $name(&self) -> Option<&$type> {
-                // Return the top-level field if present.
-                if self.common.$name.is_some() {
-                    return self.common.$name.as_ref();
+                if let Some(arch) = self.arch() {
+                    if let Some(value) = arch.$name.as_ref() {
+                        return Some(value)
+                    }
                 }
 
-                // Get the architecture-specific field.
-                self.arch()?.$name.as_ref()
+                // Return the top-level field.
+                return self.common.$name.as_ref();
             }
         )*
     };

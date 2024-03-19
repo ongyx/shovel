@@ -9,7 +9,7 @@ use crate::json;
 use crate::manifest::Manifest;
 use crate::util;
 
-/// A collection of app manifests in a Git repository.
+/// A collection of manifests in a Git repository.
 ///
 /// The repository must have a `bucket` directory, with manifest files in `.json` format.
 /// Refer to [`crate::manifest::Manifest`] for the schema.
@@ -100,12 +100,12 @@ impl Bucket {
         Ok(manifests)
     }
 
-    /// Returns the path to an app manifest.
+    /// Returns the path to an manifest.
     pub fn manifest_path(&self, name: &str) -> path::PathBuf {
         self.dir().join(format!(r"bucket\{}.json", name))
     }
 
-    /// Parses and returns an app manifest.
+    /// Parses and returns an manifest.
     ///
     /// # Arguments
     ///
@@ -143,12 +143,12 @@ impl Bucket {
             return Err(Error::ManifestNotCommited);
         }
 
-        let commit = self.find(relpath)?;
+        let commit = self.find_commit(relpath)?;
 
         Ok(commit.expect("Manifest is commited"))
     }
 
-    fn find(&self, path: &path::Path) -> Result<Option<git2::Commit>> {
+    fn find_commit(&self, path: &path::Path) -> Result<Option<git2::Commit>> {
         let mut revwalk = self.repo.revwalk()?;
         revwalk.set_sorting(git2::Sort::TIME)?;
         revwalk.push_head()?;
