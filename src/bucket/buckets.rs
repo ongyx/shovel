@@ -147,13 +147,16 @@ impl Buckets {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, path::PathBuf};
+    use std::fs;
+    use std::path;
+
+    use serde_json;
 
     use super::*;
-    use crate::test::testdir;
+    use crate::test;
 
-    fn buckets_dir() -> PathBuf {
-        testdir().join("buckets")
+    fn buckets_dir() -> path::PathBuf {
+        test::testdir().join("buckets")
     }
 
     #[test]
@@ -177,13 +180,30 @@ mod tests {
 
     #[test]
     fn buckets_manifests() {
+        let schema = test::schema();
         let buckets = Buckets::new(buckets_dir());
 
-        for (bucket, manifest) in buckets.manifests().unwrap() {
+        for (bucket_name, manifest_name) in buckets.manifests().unwrap() {
             // Try to get the bucket...
-            let bucket = buckets.get(&bucket).unwrap();
+            let bucket = buckets.get(&bucket_name).unwrap();
             // ...and parse the manifest.
-            let _manifest = bucket.manifest(&manifest).unwrap();
+            let manifest = bucket.manifest(&manifest_name).unwrap();
+
+            // Get a value from the manifest.
+            let manifest_value = serde_json::to_value(manifest).unwrap();
+
+            if let Err(errors) = schema.validate(&manifest_value) {
+                println!(
+                    "Errors found while validating manifest {}/{} at '{}'",
+                    bucket_name,
+                    manifest_name,
+                    bucket.manifest_path(&manifest_name).display()
+                );
+
+                for error in errors {
+                    dbg!(error);
+                }
+            };
         }
     }
 }

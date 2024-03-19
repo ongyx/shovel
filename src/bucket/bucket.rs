@@ -5,8 +5,9 @@ use std::path;
 use git2;
 
 use crate::error::{Error, Result};
+use crate::json;
 use crate::manifest::Manifest;
-use crate::util::{json_from_file, osstr_to_string};
+use crate::util;
 
 /// A collection of app manifests in a Git repository.
 ///
@@ -90,7 +91,7 @@ impl Bucket {
                 // Take only the file stem (i.e., 'example' for 'example.json')
                 let name = path.file_stem().unwrap();
 
-                Some(osstr_to_string(name))
+                Some(util::osstr_to_string(name))
             } else {
                 None
             }
@@ -116,9 +117,9 @@ impl Bucket {
     pub fn manifest(&self, name: &str) -> Result<Manifest> {
         let path = self.manifest_path(name);
 
-        json_from_file(&path).map_err(|err| match err {
+        json::from_file(&path).map_err(|err| match err {
             // Map the NotFound IO error kind to ManifestNotFound.
-            Error::IO(ioerr) if ioerr.kind() == io::ErrorKind::NotFound => Error::ManifestNotFound,
+            Error::Io(ioerr) if ioerr.kind() == io::ErrorKind::NotFound => Error::ManifestNotFound,
             _ => err,
         })
     }

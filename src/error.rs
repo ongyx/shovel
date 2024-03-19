@@ -33,11 +33,11 @@ pub enum Error {
 
     /// An underlying error with serde_json.
     #[error(transparent)]
-    JSON(#[from] serde_path_to_error::Error<serde_json::Error>),
+    Json(#[from] serde_path_to_error::Error<serde_json::Error>),
 
     /// An underlying error with std::io.
     #[error(transparent)]
-    IO(#[from] io::Error),
+    Io(#[from] io::Error),
 
     /// An underlying error with Git.
     #[error(transparent)]

@@ -2,11 +2,11 @@ pub mod app;
 pub mod bucket;
 pub mod config;
 pub mod error;
+pub mod json;
 pub mod manifest;
 pub mod shovel;
 pub mod timestamp;
 
-mod json;
 #[cfg(test)]
 mod test;
 mod util;
@@ -18,4 +18,3 @@ pub use error::{Error, Result};
 pub use manifest::Manifest;
 pub use shovel::Shovel;
 pub use timestamp::Timestamp;
-pub use util::json_from_file;

@@ -3,9 +3,10 @@ use std::path;
 
 use crate::app::Metadata;
 use crate::error::{Error, Result};
+use crate::json;
 use crate::manifest::Manifest;
 use crate::timestamp::Timestamp;
-use crate::util::{json_from_file, mod_time};
+use crate::util;
 
 /// An installed app in a directory.
 ///
@@ -38,7 +39,7 @@ impl App {
 
     /// Returns the last modified time of the app as a UNIX timestamp.
     pub fn timestamp(&self) -> Result<Timestamp> {
-        mod_time(self.dir())
+        util::mod_time(self.dir())
     }
 
     /// Returns the path to the app's manifest, or None if it does not exist.
@@ -60,7 +61,7 @@ impl App {
     pub fn manifest(&self) -> Result<Manifest> {
         let path = self.manifest_path().ok_or(Error::ManifestNotFound)?;
 
-        json_from_file(path)
+        json::from_file(path)
     }
 
     /// Returns the path to the app's metadata.
@@ -76,8 +77,8 @@ impl App {
     pub fn metadata(&self) -> Result<Metadata> {
         let path = self.metadata_path();
 
-        json_from_file(&path).map_err(|err| match err {
-            Error::IO(ioerr) if ioerr.kind() == io::ErrorKind::NotFound => Error::MetadataNotFound,
+        json::from_file(&path).map_err(|err| match err {
+            Error::Io(ioerr) if ioerr.kind() == io::ErrorKind::NotFound => Error::MetadataNotFound,
             _ => err,
         })
     }

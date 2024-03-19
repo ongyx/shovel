@@ -167,8 +167,8 @@ impl Run for KnownCommand {
 }
 
 enum Verified {
-    Success(String),
-    Failure(String, shovel::Error),
+    Success,
+    Failure { name: String, error: eyre::Error },
 }
 
 #[derive(clap::Args)]
@@ -182,18 +182,24 @@ impl VerifyCommand {
         &self,
         shovel: &'sh mut shovel::Shovel,
         bucket_name: &str,
-    ) -> shovel::Result<impl Iterator<Item = Verified> + 'sh> {
+    ) -> eyre::Result<impl Iterator<Item = Verified> + 'sh> {
         use Verified::*;
 
         let bucket = shovel.buckets.get(bucket_name)?;
+        let manifests = bucket.manifests()?;
 
-        Ok(bucket
-            .manifests()?
-            // The manifest is not actually needed, so replace it with a unit value.
-            .map(move |name| match bucket.manifest(&name) {
-                Ok(_) => Success(name.to_owned()),
-                Err(err) => Failure(name.to_owned(), err),
-            }))
+        let verified = manifests.map(move |name| -> Verified {
+            // Attempt to parse the manifest.
+            match bucket.manifest(&name) {
+                Ok(_) => Success,
+                Err(error) => Failure {
+                    name,
+                    error: error.into(),
+                },
+            }
+        });
+
+        Ok(verified)
     }
 }
 
@@ -212,8 +218,8 @@ impl Run for VerifyCommand {
 
             for verified in self.verify(shovel, &bucket_name)? {
                 match verified {
-                    Success(_) => success += 1,
-                    Failure(name, err) => failures.push((name, err)),
+                    Success => success += 1,
+                    Failure { name, error } => failures.push((name, error)),
                 }
             }
 

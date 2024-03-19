@@ -33,7 +33,7 @@ fn main() -> eyre::Result<()> {
     let config: shovel::Config = match args.config {
         Some(config_path) => {
             // Read the config file.
-            shovel::json_from_file(&config_path)
+            shovel::json::from_file(&config_path)
                 .wrap_err_with(|| format!("Failed to parse config file {}", config_path))?
         }
         None => Default::default(),
