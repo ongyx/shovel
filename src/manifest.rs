@@ -7,6 +7,30 @@ use serde_with;
 
 use crate::json::{json_enum, json_enum_key, json_struct};
 
+macro_rules! getter {
+    ($arch_type:ty { $($name:ident: $type:ty),* $(,)? }) => {
+        /// Returns the values for the current architecture.
+        pub fn arch(&self) -> Option<&$arch_type> {
+            self.architecture
+                .as_ref()
+                .and_then(|arch| arch.get(&Arch::current()))
+        }
+
+        $(
+            /// Returns the common or architecture-specific value for the field.
+            pub fn $name(&self) -> Option<&$type> {
+                // Return the top-level field if present.
+                if self.common.$name.is_some() {
+                    return self.common.$name.as_ref();
+                }
+
+                // Get the architecture-specific field.
+                self.arch()?.$name.as_ref()
+            }
+        )*
+    };
+}
+
 json_struct! {
     /// A list represented as a single element by itself or multiple elements.
     #[serde(transparent)]
@@ -406,8 +430,13 @@ json_enum_key! {
     }
 }
 
-impl Default for Arch {
-    fn default() -> Self {
+impl Arch {
+    /// Returns the current architecture.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if the target architecture is not one of (`x86`, `x86_64`, `aarch64`).
+    pub fn current() -> Self {
         if cfg!(target_arch = "x86") {
             Self::X86
         } else if cfg!(target_arch = "x86_64") {
@@ -417,6 +446,12 @@ impl Default for Arch {
         } else {
             panic!("Unsupported architecture")
         }
+    }
+}
+
+impl Default for Arch {
+    fn default() -> Self {
+        Self::current()
     }
 }
 
@@ -472,6 +507,21 @@ json_struct! {
         /// Shared fields.
         #[serde(flatten)]
         pub common: AutoupdateArch,
+    }
+}
+
+impl Autoupdate {
+    getter! {
+        AutoupdateArch {
+            bin: Bins,
+            env_add_path: List<String>,
+            env_set: HashMap<String, String>,
+            extract_dir: List<String>,
+            hash: List<HashExtraction>,
+            installer: Installer,
+            shortcuts: Vec<Shortcut>,
+            url: List<String>,
+        }
     }
 }
 
@@ -571,6 +621,27 @@ json_struct! {
         /// Common fields.
         #[serde(flatten)]
         pub common: ManifestArch,
+    }
+}
+
+impl Manifest {
+    getter! {
+        ManifestArch {
+            bin: Bins,
+            checkver: Checkver,
+            env_add_path: List<String>,
+            env_set: HashMap<String, String>,
+            extract_dir: List<String>,
+            hash: List<String>,
+            installer: Installer,
+            pre_install: List<String>,
+            post_install: List<String>,
+            pre_uninstall: List<String>,
+            post_uninstall: List<String>,
+            shortcuts: Vec<Shortcut>,
+            uninstaller: Installer,
+            url: List<String>,
+        }
     }
 }
 
