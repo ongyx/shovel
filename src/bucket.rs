@@ -377,7 +377,6 @@ mod tests {
     use std::fs;
 
     use git2;
-    use serde_json;
     use tempfile;
 
     use super::*;
@@ -440,30 +439,13 @@ mod tests {
 
     #[test]
     fn buckets_manifests() {
-        let schema = test::schema();
         let mut buckets = Buckets::new(buckets_dir());
 
         for (name, manifest_name) in buckets.manifests().unwrap() {
             // Try to get the bucket...
             let bucket = buckets.open(&name).unwrap();
             // ...and parse the manifest.
-            let manifest = bucket.manifest(&manifest_name).unwrap();
-
-            // Get a value from the manifest.
-            let manifest_value = serde_json::to_value(manifest).unwrap();
-
-            if let Err(errors) = schema.validate(&manifest_value) {
-                println!(
-                    "Errors found while validating manifest {}/{} at '{}'",
-                    name,
-                    manifest_name,
-                    bucket.manifest_path(&manifest_name).display()
-                );
-
-                for error in errors {
-                    dbg!(error);
-                }
-            };
+            bucket.manifest(&manifest_name).unwrap();
         }
     }
 }

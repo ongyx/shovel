@@ -101,12 +101,14 @@ impl Info {
     fn new(shovel: &mut shovel::Shovel, name: &str) -> shovel::Result<Self> {
         use shovel::Error::AppNotFound;
 
-        // TODO: cleaner API?
         let (bucket, manifest) = shovel.buckets.manifest(name)?;
 
         let license = manifest.license.to_string();
+
         let commit = bucket.manifest_commit(name)?;
+
         let updated_at = shovel::Timestamp::from(commit.time()).to_string();
+
         let updated_by = commit.author().name().unwrap().to_owned();
 
         let app = shovel.apps.open_current(name);
@@ -122,9 +124,9 @@ impl Info {
             .bin()
             .map(|bins| bins.to_string())
             .unwrap_or_default();
+
         let shortcuts = manifest
-            .common
-            .shortcuts
+            .shortcuts()
             .map(|shortcuts| {
                 let shortcuts: Vec<_> = shortcuts
                     .iter()
@@ -271,9 +273,7 @@ impl SearchInfo {
     fn new(bucket: String, name: String, manifest: &shovel::Manifest) -> Self {
         let version = manifest.version.clone();
         let binaries = manifest
-            .common
-            .bin
-            .as_ref()
+            .bin()
             .map(|bins| bins.to_string())
             .unwrap_or_default();
 

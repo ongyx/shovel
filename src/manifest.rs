@@ -45,8 +45,8 @@ json_struct! {
 json_enum! {
     /// A software license for an app.
     pub enum License {
-        /// A simple identifier.
-        ID(String),
+        /// A simple identifier or URL.
+        Simple(String),
 
         /// An extended identifier with a URL.
         Extended {
@@ -58,20 +58,25 @@ json_enum! {
 
 impl Default for License {
     fn default() -> Self {
-        Self::ID("Unknown".to_owned())
+        Self::Simple("Unknown".to_owned())
     }
 }
 
 impl fmt::Display for License {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::ID(id) => write!(f, "{}", id),
-            Self::Extended { identifier, url } => match (identifier, url) {
-                (Some(id), Some(url)) => write!(f, "{} ({})", id, url),
-                (Some(id), _) => write!(f, "{}", id),
-                (_, Some(url)) => write!(f, "{}", url),
-                (_, _) => Ok(()),
-            },
+            Self::Simple(id) => write!(f, "{}", id),
+            Self::Extended { identifier, url } => {
+                if let (Some(identifier), Some(url)) = (identifier, url) {
+                    write!(f, "{} ({})", identifier, url)
+                } else {
+                    let identifier = identifier.as_deref();
+                    let url = url.as_deref();
+
+                    // Try to unwrap either identifier or url.
+                    write!(f, "{}", identifier.or(url).unwrap_or("Unknown"))
+                }
+            }
         }
     }
 }
@@ -315,10 +320,10 @@ impl fmt::Display for Bin {
     }
 }
 
-// NOTE: We cannot use List<Bin> directly as the JSON array decodes to Shim instead.
-// This is reflected in the test `deserialize_bin`.
-
 json_enum! {
+    // NOTE: We cannot use List<Bin> directly as the JSON array decodes to Shim instead.
+    // This is reflected in the test `deserialize_bin`.
+
     /// One or more executables to add to the user's path.
     pub enum Bins {
         /// A path to a single executable.
