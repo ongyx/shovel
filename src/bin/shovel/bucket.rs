@@ -70,6 +70,7 @@ struct CloneTracker {
     progress: sync::Mutex<linya::Progress>,
     // These bars are initialized on first use.
     recv_bar: Option<linya::Bar>,
+    indx_bar: Option<linya::Bar>,
     cout_bar: Option<linya::Bar>,
 }
 
@@ -79,6 +80,7 @@ impl CloneTracker {
         Self {
             progress: sync::Mutex::new(linya::Progress::new()),
             recv_bar: None,
+            indx_bar: None,
             cout_bar: None,
         }
     }
@@ -89,7 +91,8 @@ impl CloneTracker {
 
         // Register a callback for receiving remote objects.
         callbacks.transfer_progress(|stats| {
-            let current = stats.received_objects();
+            let recv_current = stats.received_objects();
+            let indx_current = stats.indexed_objects();
             let total = stats.total_objects();
 
             if self.recv_bar.is_none() {
@@ -104,7 +107,16 @@ impl CloneTracker {
             self.progress
                 .lock()
                 .unwrap()
-                .set_and_draw(self.recv_bar.as_ref().unwrap(), current);
+                .set_and_draw(self.recv_bar.as_ref().unwrap(), recv_current);
+
+            if self.indx_bar.is_none() {
+                self.indx_bar = Some(self.progress.lock().unwrap().bar(total, "Indexing objects"));
+            }
+
+            self.progress
+                .lock()
+                .unwrap()
+                .set_and_draw(self.indx_bar.as_ref().unwrap(), indx_current);
 
             true
         });
@@ -207,7 +219,7 @@ struct BucketInfo {
 impl BucketInfo {
     fn new(bucket: &shovel::Bucket) -> shovel::Result<Self> {
         let name = bucket.name();
-        let source = bucket.origin()?;
+        let source = bucket.url()?;
         let commit = bucket.commit()?;
         let updated = shovel::Timestamp::from(commit.time()).to_string();
         let manifests = bucket.manifests()?.count();

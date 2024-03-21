@@ -80,11 +80,15 @@ impl Bucket {
         name.unwrap_or("").to_owned()
     }
 
-    /// Returns the bucket origin, i.e., the URL it was cloned from.
-    pub fn origin(&self) -> Result<String> {
+    /// Returns the bucket URL, i.e., where it was cloned from.
+    pub fn url(&self) -> Result<String> {
+        Ok(self.origin()?.url().unwrap_or("").to_owned())
+    }
+
+    fn origin(&self) -> Result<git2::Remote> {
         let origin = self.repo.find_remote("origin")?;
 
-        Ok(origin.url().unwrap_or("").to_owned())
+        Ok(origin)
     }
 
     /// Returns the last commit in the bucket.
@@ -201,6 +205,29 @@ impl Bucket {
         let status = self.repo.status_file(path)?;
 
         Ok(!(status.contains(git2::Status::WT_NEW) || status.contains(git2::Status::INDEX_NEW)))
+    }
+
+    /// Updates the bucket by pulling new changes.
+    ///
+    /// # Arguments
+    ///
+    /// `fetch_options` - The options to use for fetching changes.
+    /// `checkout_builder` - The builder to use for checking out changes.
+    pub fn pull(
+        &mut self,
+        fetch_options: Option<&mut git2::FetchOptions>,
+        checkout_builder: Option<&mut build::CheckoutBuilder>,
+    ) -> Result<()> {
+        // Get the HEAD branch.
+        let branch = self.repo.head()?.name().unwrap().to_owned();
+
+        // Fetch updates for the HEAD branch from the origin.
+        self.origin()?.fetch(&[branch], fetch_options, None)?;
+
+        // Checkout the changes from the fetch.
+        self.repo.checkout_head(checkout_builder)?;
+
+        Ok(())
     }
 }
 
@@ -417,7 +444,7 @@ mod tests {
         let bucket = Bucket::open(test::testdir().join(r"buckets\main")).unwrap();
 
         assert_eq!(
-            bucket.origin().unwrap(),
+            bucket.url().unwrap(),
             "https://github.com/ScoopInstaller/Main"
         );
     }
