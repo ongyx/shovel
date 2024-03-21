@@ -1,5 +1,4 @@
-mod bucket;
-mod global;
+mod commands;
 mod run;
 mod util;
 
@@ -10,7 +9,6 @@ use eyre;
 use eyre::WrapErr;
 use shovel;
 
-use global::GlobalCommands;
 use run::Run;
 
 #[derive(clap::Parser)]
@@ -18,7 +16,7 @@ use run::Run;
 #[command(propagate_version = true)]
 struct Args {
     #[command(subcommand)]
-    commands: GlobalCommands,
+    commands: commands::Commands,
 
     /// Specify a configuration file
     #[arg(short, long, global = true)]
