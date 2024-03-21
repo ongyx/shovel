@@ -6,6 +6,7 @@ use std::iter;
 use std::path::{Path, PathBuf};
 
 use git2;
+use git2::build;
 
 use crate::error::{Error, Result};
 use crate::json;
@@ -42,13 +43,26 @@ impl Bucket {
     /// # Arguments
     ///
     /// * `url` - The Git URL of the remote bucket.
-    /// * `dir` - The path to clone the remote bucket to. It must not exist yet.
-    pub fn clone<P>(url: &str, dir: P) -> Result<Self>
+    /// * `dir` - The path to clone to. It must not exist yet.
+    /// * `builder` - The builder to clone with. If None, a new builder is created.
+    pub fn clone<P>(url: &str, dir: P, builder: Option<&mut build::RepoBuilder>) -> Result<Self>
     where
         P: AsRef<Path>,
     {
         let dir = dir.as_ref().to_owned();
-        let repo = git2::Repository::clone(url, &dir)?;
+
+        // This is needed to get a &mut reference.
+        let mut new_builder = None;
+
+        let builder = builder
+            .or_else(|| {
+                new_builder = Some(build::RepoBuilder::new());
+                new_builder.as_mut()
+            })
+            // SAFETY: The builder arg is not None, or a new one was initialised.
+            .unwrap();
+
+        let repo = builder.clone(url, &dir)?;
 
         Ok(Bucket { dir, repo })
     }
@@ -264,11 +278,17 @@ impl Buckets {
     ///
     /// * `name` - The name to add the remote bucket as.
     /// * `url` - The Git URL of the remote bucket.
+    /// * `builder` - The builder to clone with.
     ///
     /// # Errors
     ///
     /// If the bucket name already exists, `Error::BucketExists` is returned.
-    pub fn add(&mut self, name: &str, url: &str) -> Result<&mut Bucket> {
+    pub fn add(
+        &mut self,
+        name: &str,
+        url: &str,
+        builder: Option<&mut build::RepoBuilder>,
+    ) -> Result<&mut Bucket> {
         let dir = self.path(name);
         let entry = self.handles.entry(name.to_owned());
 
@@ -278,7 +298,7 @@ impl Buckets {
                 if !dir.try_exists()? {
                     let dir = self.dir.join(name);
 
-                    Ok(vacant.insert(Bucket::clone(url, dir)?))
+                    Ok(vacant.insert(Bucket::clone(url, dir, builder)?))
                 } else {
                     Err(Error::BucketExists)
                 }

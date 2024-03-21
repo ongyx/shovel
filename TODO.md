@@ -28,9 +28,9 @@ Task list for feature parity with Scoop.
 * [ ] hold
 * [ ] home
 * [ ] import
-* [ ] info
+* [x] info
 * [ ] install
-* [ ] list
+* [x] list
 * [ ] prefix
 * [ ] reset
 * [x] search

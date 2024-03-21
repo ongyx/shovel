@@ -3,7 +3,9 @@ use std::sync;
 use clap;
 use eyre;
 use eyre::{bail, WrapErr};
+use git2::build;
 use jsonschema;
+use linya;
 use owo_colors::OwoColorize;
 use serde_json;
 use shovel;
@@ -30,13 +32,6 @@ include!(concat!(env!("OUT_DIR"), "/buckets.rs"));
 /// Returns the URL of the known bucket by name.
 fn known_bucket(name: &str) -> Option<&'static str> {
     KNOWN_BUCKETS.get(name).map(|u| *u)
-}
-
-/// Formats an iterator over JSON Schema errors.
-fn format_schema_errors(errors: jsonschema::ErrorIterator<'_>) -> Vec<String> {
-    errors
-        .map(|err| format!("{:?} for {}", err.kind.red(), err.instance_path.blue(),))
-        .collect()
 }
 
 #[derive(clap::Subcommand)]
@@ -70,6 +65,79 @@ impl Run for BucketCommands {
     }
 }
 
+/// A progress tracker for clone operations in Git.
+struct CloneTracker {
+    progress: sync::Mutex<linya::Progress>,
+    // These bars are initialized on first use.
+    recv_bar: Option<linya::Bar>,
+    cout_bar: Option<linya::Bar>,
+}
+
+impl CloneTracker {
+    /// Returns a new clone tracker.
+    pub fn new() -> Self {
+        Self {
+            progress: sync::Mutex::new(linya::Progress::new()),
+            recv_bar: None,
+            cout_bar: None,
+        }
+    }
+
+    /// Returns a RepoBuilder that shows progress bars.
+    pub fn builder<'p>(&'p mut self) -> build::RepoBuilder<'p> {
+        let mut callbacks = git2::RemoteCallbacks::new();
+
+        // Register a callback for receiving remote objects.
+        callbacks.transfer_progress(|stats| {
+            let current = stats.received_objects();
+            let total = stats.total_objects();
+
+            if self.recv_bar.is_none() {
+                self.recv_bar = Some(
+                    self.progress
+                        .lock()
+                        .unwrap()
+                        .bar(total, "Receiving objects"),
+                );
+            }
+
+            self.progress
+                .lock()
+                .unwrap()
+                .set_and_draw(self.recv_bar.as_ref().unwrap(), current);
+
+            true
+        });
+
+        let mut options = git2::FetchOptions::new();
+        options.remote_callbacks(callbacks);
+
+        let mut checkout = build::CheckoutBuilder::new();
+
+        // Register a callback for checking out objects.
+        checkout.progress(|_, current, total| {
+            if self.cout_bar.is_none() {
+                self.cout_bar = Some(
+                    self.progress
+                        .lock()
+                        .unwrap()
+                        .bar(total, "Checking out objects"),
+                );
+            }
+
+            self.progress
+                .lock()
+                .unwrap()
+                .set_and_draw(self.cout_bar.as_ref().unwrap(), current);
+        });
+
+        let mut builder = build::RepoBuilder::new();
+        builder.fetch_options(options).with_checkout(checkout);
+
+        builder
+    }
+}
+
 #[derive(clap::Args)]
 pub struct AddCommand {
     /// The bucket name.
@@ -88,11 +156,15 @@ impl Run for AddCommand {
             .map(|u| u.as_str())
             .or_else(|| known_bucket(&self.name));
 
+        let mut tracker = CloneTracker::new();
+
         match url {
             Some(url) => {
+                let mut builder = tracker.builder();
+
                 shovel
                     .buckets
-                    .add(&self.name, &url)
+                    .add(&self.name, url, Some(&mut builder))
                     .wrap_err_with(|| format!("Failed to add bucket {}", self.name))?;
 
                 println!("Added bucket {} from {}", self.name.bold(), url.green());
@@ -210,6 +282,13 @@ pub struct VerifyCommand {
 }
 
 impl VerifyCommand {
+    /// Formats an iterator over JSON Schema errors.
+    fn format_schema_errors(errors: jsonschema::ErrorIterator<'_>) -> Vec<String> {
+        errors
+            .map(|err| format!("{:?} for {}", err.kind.red(), err.instance_path.blue(),))
+            .collect()
+    }
+
     fn verify<'sh>(
         &'sh self,
         shovel: &'sh mut shovel::Shovel,
@@ -233,7 +312,7 @@ impl VerifyCommand {
                             return Failure {
                                 name,
                                 error: eyre::eyre!("Failed to validate against JSON Schema"),
-                                schema_errors: format_schema_errors(errors),
+                                schema_errors: Self::format_schema_errors(errors),
                             };
                         };
                     }
