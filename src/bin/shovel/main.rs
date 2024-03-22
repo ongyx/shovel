@@ -1,5 +1,6 @@
 mod commands;
 mod run;
+mod tracker;
 mod util;
 
 use clap;
