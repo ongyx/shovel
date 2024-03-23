@@ -42,9 +42,9 @@ pub struct ListCommand {
 }
 
 impl ListCommand {
-    fn app_info(&self, shovel: &shovel::Shovel, name: &str) -> ListInfo {
-        match shovel.apps.open_current(name) {
-            Ok(app) => ListInfo::new(name, &app).unwrap_or_else(|_| ListInfo {
+    fn app_info(&self, name: &str, app: shovel::Result<shovel::App>) -> ListInfo {
+        match app {
+            Ok(app) => ListInfo::new(&name, &app).unwrap_or_else(|_| ListInfo {
                 name: name.to_owned(),
                 // Use placeholders if the app's manifest/metadata cannot be read.
                 ..Default::default()
@@ -72,7 +72,7 @@ impl Run for ListCommand {
         let apps: Vec<_> = shovel
             .apps
             .iter()?
-            .map(|name| self.app_info(shovel, &name))
+            .map(|(name, app)| self.app_info(&name, app))
             .filter_map(|info| {
                 // check the bucket and name.
                 if (bucket.is_empty() || info.bucket == bucket)

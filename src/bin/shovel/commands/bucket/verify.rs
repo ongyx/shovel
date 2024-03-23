@@ -48,43 +48,41 @@ pub struct VerifyCommand {
 }
 
 impl VerifyCommand {
-    fn verify<'sh>(
-        &'sh self,
-        shovel: &'sh mut shovel::Shovel,
-        bucket_name: &str,
-    ) -> eyre::Result<impl Iterator<Item = Verified> + 'sh> {
+    fn verify<'b>(
+        &'b self,
+        bucket: &'b shovel::Bucket,
+    ) -> eyre::Result<impl Iterator<Item = Verified> + 'b> {
         use Verified::*;
 
-        let bucket = shovel.buckets.open(bucket_name)?;
-        let manifests = bucket.manifests()?;
+        let verified = bucket
+            .manifests()?
+            .map(move |(name, manifest)| -> Verified {
+                // Check if the manifest parsed successfully.
+                match manifest {
+                    Ok(_) => {
+                        // Only verify against the schema if successfully parsed.
+                        if self.schema {
+                            let path = bucket.manifest_path(&name);
+                            let value = shovel::json::from_file(path).unwrap();
 
-        let verified = manifests.map(move |name| -> Verified {
-            // Attempt to parse the manifest.
-            match bucket.manifest(&name) {
-                Ok(_) => {
-                    // Only verify against the schema if successfully parsed.
-                    if self.schema {
-                        let path = bucket.manifest_path(&name);
-                        let value = shovel::json::from_file(path).unwrap();
-
-                        if let Err(errors) = schema().validate(&value) {
-                            return Failure {
-                                name,
-                                error: eyre::eyre!("Failed to validate against JSON Schema"),
-                                schema_errors: format_schema_errors(errors),
+                            if let Err(errors) = schema().validate(&value) {
+                                return Failure {
+                                    name,
+                                    error: eyre::eyre!("Failed to validate against JSON Schema"),
+                                    schema_errors: format_schema_errors(errors),
+                                };
                             };
-                        };
-                    }
+                        }
 
-                    Success
+                        Success
+                    }
+                    Err(error) => Failure {
+                        name,
+                        error: error.into(),
+                        schema_errors: vec![],
+                    },
                 }
-                Err(error) => Failure {
-                    name,
-                    error: error.into(),
-                    schema_errors: vec![],
-                },
-            }
-        });
+            });
 
         Ok(verified)
     }
@@ -94,18 +92,21 @@ impl Run for VerifyCommand {
     fn run(&self, shovel: &mut shovel::Shovel) -> eyre::Result<()> {
         use Verified::*;
 
-        let bucket_names = match &self.bucket {
-            Some(name) => vec![name.to_owned()],
+        let buckets = match &self.bucket {
+            Some(name) => vec![shovel.buckets.open(&name)],
             None => shovel.buckets.iter()?.collect(),
         };
 
-        for bucket_name in bucket_names {
+        for bucket in buckets {
             println!();
+
+            let bucket = bucket?;
+            let name = bucket.name();
 
             let mut success = 0;
             let mut failures = vec![];
 
-            for verified in self.verify(shovel, &bucket_name)? {
+            for verified in self.verify(&bucket)? {
                 match verified {
                     Success => success += 1,
                     Failure {
@@ -119,13 +120,13 @@ impl Run for VerifyCommand {
             match failures.len() {
                 0 => println!(
                     "{}: parsed {} manifests",
-                    bucket_name.bold(),
+                    name.bold(),
                     success.to_string().green()
                 ),
                 n => {
                     println!(
                         "{}: parsed {} manifests, {} failed:",
-                        bucket_name.bold(),
+                        name.bold(),
                         success.to_string().green(),
                         n.to_string().red(),
                     );

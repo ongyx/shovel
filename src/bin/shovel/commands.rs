@@ -3,6 +3,7 @@ mod cat;
 mod info;
 mod list;
 mod search;
+mod update;
 
 use clap;
 use eyre;

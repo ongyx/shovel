@@ -1,9 +1,7 @@
-use std::collections::hash_map::Entry;
-use std::collections::HashMap;
 use std::fs;
 use std::io;
-use std::iter;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use git2;
 use git2::build;
@@ -12,6 +10,29 @@ use crate::error::{Error, Result};
 use crate::json;
 use crate::manifest::Manifest;
 use crate::util;
+
+fn manifest_from_file<P>(path: P) -> Result<Manifest>
+where
+    P: AsRef<Path>,
+{
+    json::from_file(path).map_err(|err| match err {
+        // Map the NotFound IO error kind to ManifestNotFound.
+        Error::Io(ioerr) if ioerr.kind() == io::ErrorKind::NotFound => Error::ManifestNotFound,
+        _ => err,
+    })
+}
+
+/// A manifest in a bucket.
+pub struct Item {
+    /// The bucket which the manifest originated from.
+    pub bucket: Arc<Bucket>,
+
+    /// The manifest's name.
+    pub name: String,
+
+    /// The parsed manifest.
+    pub manifest: Result<Manifest>,
+}
 
 /// A collection of manifests in a Git repository.
 ///
@@ -99,26 +120,54 @@ impl Bucket {
         Ok(commit)
     }
 
-    /// Yields manifests by name.
-    pub fn manifests(&self) -> Result<impl Iterator<Item = String>> {
+    /// Parses and yields each manifest in the bucket as (name, manifest) where predicate(name) returns true.
+    ///
+    /// # Arguments
+    ///
+    /// `predicate` - A predicate function that determines if a manifest should be yielded.
+    pub fn search<P>(
+        &self,
+        predicate: P,
+    ) -> Result<impl Iterator<Item = (String, Result<Manifest>)>>
+    where
+        P: Fn(&str) -> bool,
+    {
         let dir = self.dir().join("bucket");
         let entries = fs::read_dir(dir)?;
 
-        let manifests = entries.filter_map(|res| res.ok()).filter_map(|entry| {
-            let path = entry.path();
-            let ext = path.extension().unwrap_or_default();
+        let manifests = entries
+            // Discard errors.
+            .filter_map(|res| res.ok())
+            // Discard paths not ending in '.json'.
+            .filter_map(|entry| {
+                let path = entry.path();
+                let ext = path.extension().unwrap_or_default();
 
-            if ext == "json" {
+                if ext == "json" {
+                    Some(path)
+                } else {
+                    None
+                }
+            })
+            // Discard manifests based on the predicate.
+            .filter_map(move |path| {
                 // Take only the file stem (i.e., 'example' for 'example.json')
-                let name = path.file_stem().unwrap();
+                let name = util::osstr_to_string(path.file_stem().unwrap());
 
-                Some(util::osstr_to_string(name))
-            } else {
-                None
-            }
-        });
+                if predicate(&name) {
+                    Some((name, manifest_from_file(path)))
+                } else {
+                    None
+                }
+            });
 
         Ok(manifests)
+    }
+
+    /// Parses and yields each manifest in the bucket as (name, manifest).
+    /// This is a convenience function over `Self::search`.
+    pub fn manifests(&self) -> Result<impl Iterator<Item = (String, Result<Manifest>)>> {
+        self.search(|_| true)
     }
 
     /// Returns the path to an manifest.
@@ -138,11 +187,7 @@ impl Bucket {
     pub fn manifest(&self, name: &str) -> Result<Manifest> {
         let path = self.manifest_path(name);
 
-        json::from_file(&path).map_err(|err| match err {
-            // Map the NotFound IO error kind to ManifestNotFound.
-            Error::Io(ioerr) if ioerr.kind() == io::ErrorKind::NotFound => Error::ManifestNotFound,
-            _ => err,
-        })
+        manifest_from_file(&path)
     }
 
     /// Returns the last commit made to a manifest.
@@ -240,10 +285,8 @@ impl Bucket {
 ///   * `...`
 pub struct Buckets {
     dir: PathBuf,
-    handles: HashMap<String, Bucket>,
 }
 
-// Bucket-related functions.
 impl Buckets {
     /// Returns a new bucket manager.
     ///
@@ -256,13 +299,14 @@ impl Buckets {
     {
         Self {
             dir: dir.as_ref().to_owned(),
-            handles: HashMap::new(),
         }
     }
 
-    /// Yields buckets by name.
-    pub fn iter(&self) -> Result<impl Iterator<Item = String>> {
-        util::subdirs(self.dir.clone())
+    /// Yields all buckets.
+    pub fn iter(&self) -> Result<impl Iterator<Item = Result<Bucket>>> {
+        let buckets = util::subdirs(self.dir.clone())?.map(|dir| Bucket::open(dir));
+
+        Ok(buckets)
     }
 
     /// Returns the path to a bucket.
@@ -279,23 +323,14 @@ impl Buckets {
     /// # Errors
     ///
     /// If the bucket does not exist, `Error::BucketNotFound` is returned.
-    pub fn open(&mut self, name: &str) -> Result<&mut Bucket> {
+    pub fn open(&self, name: &str) -> Result<Bucket> {
         let dir = self.path(name);
-        let entry = self.handles.entry(name.to_owned());
 
-        match entry {
-            Entry::Occupied(occupied) => Ok(occupied.into_mut()),
-            Entry::Vacant(vacant) => {
-                // Make sure the bucket exists.
-                if dir.try_exists()? {
-                    let bucket = Bucket::open(dir)?;
-
-                    // Insert the bucket and return it.
-                    Ok(vacant.insert(bucket))
-                } else {
-                    Err(Error::BucketNotFound)
-                }
-            }
+        // Make sure the bucket exists.
+        if dir.try_exists()? {
+            Bucket::open(dir)
+        } else {
+            Err(Error::BucketNotFound)
         }
     }
 
@@ -311,25 +346,19 @@ impl Buckets {
     ///
     /// If the bucket name already exists, `Error::BucketExists` is returned.
     pub fn add(
-        &mut self,
+        &self,
         name: &str,
         url: &str,
         builder: Option<&mut build::RepoBuilder>,
-    ) -> Result<&mut Bucket> {
+    ) -> Result<Bucket> {
         let dir = self.path(name);
-        let entry = self.handles.entry(name.to_owned());
 
-        match entry {
-            Entry::Occupied(_) => Err(Error::BucketExists),
-            Entry::Vacant(vacant) => {
-                if !dir.try_exists()? {
-                    let dir = self.dir.join(name);
+        if !dir.try_exists()? {
+            let dir = self.dir.join(name);
 
-                    Ok(vacant.insert(Bucket::clone(url, dir, builder)?))
-                } else {
-                    Err(Error::BucketExists)
-                }
-            }
+            Bucket::clone(url, dir, builder)
+        } else {
+            Err(Error::BucketExists)
         }
     }
 
@@ -342,14 +371,7 @@ impl Buckets {
     /// # Errors
     ///
     /// If the bucket does not exist, `Error::BucketNotFound` is returned.
-    pub fn remove(&mut self, name: &str) -> Result<()> {
-        let entry = self.handles.entry(name.to_owned());
-
-        // Remove the existing bucket handle, if any.
-        if let Entry::Occupied(occupied) = entry {
-            occupied.remove_entry();
-        }
-
+    pub fn remove(&self, name: &str) -> Result<()> {
         let dir = self.path(name);
 
         if dir.try_exists()? {
@@ -361,61 +383,62 @@ impl Buckets {
         }
     }
 
-    /// Yields manifests in all buckets as a 2-tuple (bucket, manifest) by name.
-    pub fn manifests(&mut self) -> Result<impl Iterator<Item = (String, String)>> {
-        // Get manifests from each bucket.
-        // Any error in opening a bucket is returned.
-        let manifests: Result<Vec<_>> = self
+    /// Parses and yields each manifest in all buckets where predicate(bucket_name, manifest_name) returns true.
+    ///
+    /// # Arguments
+    ///
+    /// * `predicate` - A predicate function that determines if the manifest should be yielded.
+    pub fn search<P>(&self, predicate: P) -> Result<impl Iterator<Item = Item>>
+    where
+        P: Fn(&str, &str) -> bool + Copy,
+    {
+        let buckets: Result<Vec<_>> = self
             .iter()?
-            .map(|name| {
-                // NOTE: The bucket cannot be returned directly, since self cannot escape this closure
-                let bucket = self.open(&name)?;
-                let manifests = bucket.manifests()?;
+            .map(move |res| {
+                // If the bucket opened successfully, search for manifests.
+                res.and_then(move |bucket| {
+                    // Since each item has a handle to the bucket, the handle is wrapped in an Arc to avoid duplication.
+                    let bucket = Arc::new(bucket);
+                    let bucket_name = bucket.name();
 
-                Ok((name, manifests))
+                    let manifests = bucket
+                        .search(move |manifest_name| predicate(&bucket_name, manifest_name))?;
+
+                    Ok((bucket, manifests))
+                })
             })
             .collect();
 
-        let manifests = manifests?
+        let manifests = buckets?
             .into_iter()
-            // Zip each bucket's manifest as a two-tuple (bucket, manifest).
-            .map(|(b, m)| iter::repeat(b).zip(m))
-            // Flatten the manifest iterators.
+            .map(|(bucket, manifests)| {
+                // For each manifest, wrap it into an item.
+                manifests.map(move |(name, manifest)| Item {
+                    bucket: bucket.clone(),
+                    name,
+                    manifest,
+                })
+            })
             .flatten();
 
         Ok(manifests)
     }
 
-    /// Searches all buckets for manifests and yields (bucket, manifest) by name.
-    ///
-    /// # Arguments
-    ///
-    /// * `predicate` - A predicate function with input (bucket, manifest) that determines if the pair should be yielded.
-    pub fn search<P>(&mut self, predicate: P) -> Result<impl Iterator<Item = (String, String)>>
-    where
-        P: Fn(&str, &str) -> bool,
-    {
-        // Move the predicate inside and filter the manifests.
-        Ok(self.manifests()?.filter(move |(b, m)| predicate(&b, &m)))
+    /// Parses and yields each manifest in all buckets.
+    /// This is a convenience function over `Self::search`.
+    pub fn manifests(&self) -> Result<impl Iterator<Item = Item>> {
+        self.search(|_, _| true)
     }
 
-    /// Searches all buckets for a single manifest and returns (bucket, manifest).
+    /// Parses and returns a single manifest in any bucket.
     ///
     /// # Arguments
     ///
     /// * `name`- The name of the manifest.
-    pub fn manifest(&mut self, name: &str) -> Result<(&mut Bucket, Manifest)> {
+    pub fn manifest(&self, name: &str) -> Result<Item> {
         let mut search = self.search(|_, manifest_name| manifest_name == name)?;
 
-        match search.next() {
-            Some((bucket, manifest)) => {
-                let bucket = self.open(&bucket)?;
-                let manifest = bucket.manifest(&manifest)?;
-
-                Ok((bucket, manifest))
-            }
-            None => Err(Error::ManifestNotFound),
-        }
+        search.next().ok_or(Error::ManifestNotFound)
     }
 }
 
@@ -470,7 +493,11 @@ mod tests {
         let dir = buckets_dir();
         let buckets = Buckets::new(&dir);
 
-        let mut names_from_buckets: Vec<_> = buckets.iter().unwrap().collect();
+        let mut names_from_buckets: Vec<_> = buckets
+            .iter()
+            .unwrap()
+            .map(|bucket| bucket.unwrap().name())
+            .collect();
         names_from_buckets.sort();
 
         let mut names_from_fs: Vec<_> = fs::read_dir(&dir)
@@ -486,13 +513,10 @@ mod tests {
 
     #[test]
     fn buckets_manifests() {
-        let mut buckets = Buckets::new(buckets_dir());
+        let buckets = Buckets::new(buckets_dir());
 
-        for (name, manifest_name) in buckets.manifests().unwrap() {
-            // Try to get the bucket...
-            let bucket = buckets.open(&name).unwrap();
-            // ...and parse the manifest.
-            bucket.manifest(&manifest_name).unwrap();
+        for item in buckets.manifests().unwrap() {
+            item.manifest.unwrap();
         }
     }
 }

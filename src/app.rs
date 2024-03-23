@@ -1,5 +1,5 @@
 use std::io;
-use std::path;
+use std::path::{Path, PathBuf};
 
 use crate::error::{Error, Result};
 use crate::json;
@@ -25,7 +25,7 @@ json::json_struct! {
 /// * `manifest.json` - The app's manifest at the time of installation.
 /// * `install.json` - The app's install metadata, describing its architecture type and the bucket it came from.
 pub struct App {
-    dir: path::PathBuf,
+    dir: PathBuf,
 }
 
 impl App {
@@ -36,7 +36,7 @@ impl App {
     /// * `dir` - The path to the app. It must point to a directory.
     pub fn open<P>(dir: P) -> Self
     where
-        P: AsRef<path::Path>,
+        P: AsRef<Path>,
     {
         Self {
             dir: dir.as_ref().to_owned(),
@@ -44,7 +44,7 @@ impl App {
     }
 
     /// Returns the app directory.
-    pub fn dir(&self) -> &path::Path {
+    pub fn dir(&self) -> &Path {
         &self.dir
     }
 
@@ -54,7 +54,7 @@ impl App {
     }
 
     /// Returns the path to the app's manifest, or None if it does not exist.
-    pub fn manifest_path(&self) -> Option<path::PathBuf> {
+    pub fn manifest_path(&self) -> Option<PathBuf> {
         let path = self.dir().join("manifest.json");
 
         if path.exists() {
@@ -76,7 +76,7 @@ impl App {
     }
 
     /// Returns the path to the app's metadata.
-    pub fn metadata_path(&self) -> path::PathBuf {
+    pub fn metadata_path(&self) -> PathBuf {
         self.dir().join("install.json")
     }
 
@@ -110,7 +110,7 @@ impl App {
 ///     * `current` -> `0.2.0`
 ///   * `...`
 pub struct Apps {
-    dir: path::PathBuf,
+    dir: PathBuf,
 }
 
 impl Apps {
@@ -121,40 +121,64 @@ impl Apps {
     /// * `dir` - The directory where apps are stored.
     pub fn new<P>(dir: P) -> Self
     where
-        P: AsRef<path::Path>,
+        P: AsRef<Path>,
     {
         Self {
             dir: dir.as_ref().to_owned(),
         }
     }
 
-    /// Yields apps by name.
-    pub fn iter(&self) -> Result<impl Iterator<Item = String> + '_> {
-        util::subdirs(&self.dir)
+    /// Yields the current version of each app.
+    pub fn iter(&self) -> Result<impl Iterator<Item = (String, Result<App>)>> {
+        let apps = util::subdirs(self.dir.clone())?.map(|mut dir| {
+            let name = util::osstr_to_string(dir.file_name().unwrap());
+
+            dir.push("current");
+
+            // The 'current' directory may not exist if the app is corrupted.
+            let app = dir
+                .try_exists()
+                .map_err(|err| Error::from(err))
+                .and_then(|exists| {
+                    if exists {
+                        Ok(App::open(dir))
+                    } else {
+                        Err(Error::AppNotFound)
+                    }
+                });
+
+            (name, app)
+        });
+
+        Ok(apps)
     }
 
     /// Yields the installed versions for an app. This does not include 'current'.
-    pub fn versions(&self, name: &str) -> Result<impl Iterator<Item = String>> {
+    pub fn versions(&self, name: &str) -> Result<impl Iterator<Item = App>> {
         let path = self.dir.join(name);
 
-        Ok(util::subdirs(path)?.filter(|v| v != "current"))
+        let versions = util::subdirs(path)?.filter_map(|dir| {
+            if dir.file_name().unwrap() != "current" {
+                Some(App::open(dir))
+            } else {
+                None
+            }
+        });
+
+        Ok(versions)
     }
 
-    /// Returns the path to an app, or None if it does not exist.
+    /// Returns the path to an app.
     ///
     /// # Arguments
     ///
     /// * `name` - The name of the app.
     /// * `version` - The version of the app.
-    pub fn path(&self, name: &str, version: &str) -> Option<path::PathBuf> {
+    pub fn path(&self, name: &str, version: &str) -> PathBuf {
         let mut dir = self.dir.to_owned();
         dir.extend([name, version]);
 
-        if dir.exists() {
-            Some(dir)
-        } else {
-            None
-        }
+        dir
     }
 
     /// Opens and returns an app.
@@ -168,9 +192,13 @@ impl Apps {
     ///
     /// If the app does not exist, `Error::AppNotFound` is returned.
     pub fn open(&self, name: &str, version: &str) -> Result<App> {
-        let dir = self.path(name, version).ok_or(Error::AppNotFound)?;
+        let dir = self.path(name, version);
 
-        Ok(App::open(dir))
+        if dir.try_exists()? {
+            Ok(App::open(dir))
+        } else {
+            Err(Error::AppNotFound)
+        }
     }
 
     /// Opens and returns an app's current version.

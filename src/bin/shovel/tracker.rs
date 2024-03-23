@@ -109,6 +109,15 @@ impl Sender {
         callbacks
     }
 
+    /// Returns a set of fetch options that wraps `Self::remote_callbacks`.
+    pub fn fetch_options<'fo>(&'fo self) -> git2::FetchOptions<'fo> {
+        let mut fetch = git2::FetchOptions::new();
+
+        fetch.remote_callbacks(self.remote_callbacks());
+
+        fetch
+    }
+
     /// Returns a checkout builder with a callback that sends updates when invoked.
     pub fn checkout_builder<'cb>(&'cb self) -> build::CheckoutBuilder<'cb> {
         let mut checkout = build::CheckoutBuilder::new();
@@ -130,12 +139,9 @@ impl Sender {
 
     /// Returns a repository builder with both remote and checkout callbacks.
     pub fn repo_builder<'rb>(&'rb self) -> build::RepoBuilder<'rb> {
-        let mut options = git2::FetchOptions::new();
-        options.remote_callbacks(self.remote_callbacks());
-
         let mut builder = build::RepoBuilder::new();
         builder
-            .fetch_options(options)
+            .fetch_options(self.fetch_options())
             .with_checkout(self.checkout_builder());
 
         builder
@@ -149,6 +155,38 @@ impl Receiver {
     /// Returns an iterator over updates.
     pub fn iter(&self) -> mpsc::Iter<Update> {
         self.0.iter()
+    }
+
+    /// Listens for updates and presents a progress bar for each kind, until the sender sends a close message.
+    /// It is the caller's responsibility to make sure `Sender::close` is called when operations cease.
+    ///
+    /// # Arguments
+    ///
+    /// `name` - The name of the repository for presentation purposes.
+    pub fn show_progress(&self, name: Option<&str>) {
+        let mut progress = linya::Progress::new();
+        let mut bars = HashMap::new();
+
+        for update in self {
+            if let Close = update.kind {
+                // Leave the loop when there are no more updates.
+                break;
+            }
+
+            // Check if a progress bar exists for this update, and create one otherwise.
+            let bar = bars.entry(update.kind).or_insert_with(|| {
+                let desc = update.kind.describe();
+
+                let label = match name {
+                    Some(name) => format!("{}: {}", name, desc),
+                    None => desc.to_owned(),
+                };
+
+                progress.bar(update.total, label)
+            });
+
+            progress.set_and_draw(bar, update.current);
+        }
     }
 }
 
@@ -170,44 +208,9 @@ impl<'r> IntoIterator for &'r Receiver {
     }
 }
 
-/// A tracker for Git operations.
-pub struct Tracker {
-    tx: Sender,
-    rx: Receiver,
-}
+/// Creates a new tracker channel, returning the sender and receiver halves.
+pub fn channel() -> (Sender, Receiver) {
+    let (tx, rx) = mpsc::channel();
 
-impl Tracker {
-    /// Returns a new tracker.
-    pub fn new() -> Self {
-        let (tx, rx) = mpsc::channel();
-
-        Self {
-            tx: Sender(tx),
-            rx: Receiver(rx),
-        }
-    }
-
-    /// Returns the sender and receiver halves of the tracker.
-    pub fn channel(&self) -> (Sender, &Receiver) {
-        (self.tx.clone(), &self.rx)
-    }
-
-    /// Listens for updates and presents a progress bar for each kind.
-    pub fn show_progress(&self) {
-        let mut progress = linya::Progress::new();
-        let mut bars = HashMap::new();
-
-        for update in &self.rx {
-            if let Close = update.kind {
-                break;
-            }
-
-            // Check if a progress bar exists for this update, and create one otherwise.
-            let bar = bars
-                .entry(update.kind)
-                .or_insert_with(|| progress.bar(update.total, update.kind.describe()));
-
-            progress.set_and_draw(bar, update.current);
-        }
-    }
+    (Sender(tx), Receiver(rx))
 }

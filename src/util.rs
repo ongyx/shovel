@@ -1,6 +1,6 @@
 use std::ffi;
 use std::fs;
-use std::path;
+use std::path::{Path, PathBuf};
 use std::time;
 
 use crate::error::Result;
@@ -20,9 +20,9 @@ pub fn osstr_to_string(osstr: &ffi::OsStr) -> String {
 /// # Arguments
 ///
 /// * `path` - The path.
-pub fn subdirs<P>(path: P) -> Result<impl Iterator<Item = String>>
+pub fn subdirs<P>(path: P) -> Result<impl Iterator<Item = PathBuf>>
 where
-    P: AsRef<path::Path>,
+    P: AsRef<Path>,
 {
     let dirs = fs::read_dir(path)?
         // Discard errors.
@@ -31,9 +31,7 @@ where
             let path = entry.path();
 
             if path.is_dir() {
-                let name = path.file_name().unwrap();
-
-                Some(osstr_to_string(name))
+                Some(path)
             } else {
                 None
             }
@@ -45,7 +43,7 @@ where
 /// Returns the modification time of a path as a UNIX timestamp.
 pub fn mod_time<P>(path: P) -> Result<Timestamp>
 where
-    P: AsRef<path::Path>,
+    P: AsRef<Path>,
 {
     let timestamp = path
         .as_ref()
