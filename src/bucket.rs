@@ -120,6 +120,31 @@ impl Bucket {
         Ok(commit)
     }
 
+    /// Yields the commits made to the bucket from HEAD until the commit pointed to by `since`.
+    ///
+    /// # Arguments
+    ///
+    /// * `since` - The commit ID to yield until.
+    pub fn commits(&self, since: git2::Oid) -> Result<impl Iterator<Item = git2::Commit>> {
+        // Create a revwalk to iterate commits from HEAD chronologically.
+        let mut revwalk = self.repo.revwalk()?;
+        revwalk.set_sorting(git2::Sort::TIME)?;
+        revwalk.push_head()?;
+
+        let commits = revwalk.map_while(move |res| {
+            // Ignore invalid OIDs.
+            let oid = res.ok()?;
+
+            if oid != since {
+                self.repo.find_commit(oid).ok()
+            } else {
+                None
+            }
+        });
+
+        Ok(commits)
+    }
+
     /// Parses and yields each manifest in the bucket as (name, manifest) where predicate(name) returns true.
     ///
     /// # Arguments
@@ -252,7 +277,7 @@ impl Bucket {
         Ok(!(status.contains(git2::Status::WT_NEW) || status.contains(git2::Status::INDEX_NEW)))
     }
 
-    /// Updates the bucket by pulling new changes.
+    /// Updates the bucket by pulling new changes. Only fast-forwarding is supported.
     ///
     /// # Arguments
     ///
@@ -266,13 +291,64 @@ impl Bucket {
         // Get the HEAD branch.
         let branch = self.repo.head()?.name().unwrap().to_owned();
 
-        // Fetch updates for the HEAD branch from the origin.
-        self.origin()?.fetch(&[branch], fetch_options, None)?;
+        // Get the origin remote.
+        // TODO: Don't hardcode?
+        let mut origin = self.origin()?;
 
-        // Checkout the changes from the fetch.
-        self.repo.checkout_head(checkout_builder)?;
+        // Fetch updates for the HEAD branch from the origin.
+        let new_head = self.fetch(&[&branch], &mut origin, fetch_options)?;
+
+        // Attempt to fast-forward changes.
+        self.fast_forward(&branch, &new_head, checkout_builder)?;
 
         Ok(())
+    }
+
+    fn fast_forward(
+        &self,
+        branch: &str,
+        commit: &git2::AnnotatedCommit,
+        checkout_builder: Option<&mut build::CheckoutBuilder>,
+    ) -> Result<()> {
+        let mut new_checkout_builder = None;
+
+        let checkout_builder = checkout_builder
+            .or_else(|| {
+                new_checkout_builder = Some(build::CheckoutBuilder::new());
+                new_checkout_builder.as_mut()
+            })
+            .unwrap();
+
+        // NOTE: According to the git2 pull example, not including this option causes the working directory to not update.
+        checkout_builder.force();
+
+        // Obtain a reference to the branch HEAD.
+        let mut head = self.repo.find_reference(branch)?;
+
+        // Set the branch HEAD to the new commit ID.
+        head.set_target(commit.id(), "pull: Fast-forward")?;
+
+        // Set the repository HEAD to the branch HEAD.
+        self.repo.set_head(branch)?;
+
+        // Checkout the new changes.
+        self.repo.checkout_head(Some(checkout_builder))?;
+
+        Ok(())
+    }
+
+    fn fetch(
+        &self,
+        branches: &[&str],
+        remote: &mut git2::Remote,
+        fetch_options: Option<&mut git2::FetchOptions>,
+    ) -> Result<git2::AnnotatedCommit> {
+        remote.fetch(branches, fetch_options, None)?;
+
+        // Get the HEAD of the fetched remote.
+        let head = self.repo.find_reference("FETCH_HEAD")?;
+
+        Ok(self.repo.reference_to_annotated_commit(&head)?)
     }
 }
 

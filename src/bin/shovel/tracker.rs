@@ -125,13 +125,15 @@ impl Sender {
 
         // Register a callback for checking out objects.
         checkout.progress(move |_, current, total| {
-            sender
-                .send(Update {
-                    kind: Checkout,
-                    current,
-                    total,
-                })
-                .unwrap();
+            if total > 0 {
+                sender
+                    .send(Update {
+                        kind: Checkout,
+                        current,
+                        total,
+                    })
+                    .unwrap();
+            }
         });
 
         checkout

@@ -28,6 +28,9 @@ pub enum Commands {
 
     /// Search for an app
     Search(search::SearchCommand),
+
+    /// Update all buckets
+    Update(update::UpdateCommand),
 }
 
 impl Run for Commands {
@@ -38,6 +41,7 @@ impl Run for Commands {
             Self::Info(cmd) => cmd.run(shovel),
             Self::List(cmd) => cmd.run(shovel),
             Self::Search(cmd) => cmd.run(shovel),
+            Self::Update(cmd) => cmd.run(shovel),
         }
     }
 }
