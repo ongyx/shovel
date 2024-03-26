@@ -8,27 +8,20 @@ use shovel;
 
 use crate::commands::bucket::known;
 use crate::run::Run;
-use crate::tracker;
+use crate::tracker::{SharedProgress, Tracker};
 
 fn add_bucket(shovel: &mut shovel::Shovel, name: &str, url: &str) -> shovel::Result<()> {
-    let (sender, receiver) = tracker::channel();
-
     thread::scope(|scope| {
         // Since updates on progress are sent over a channel, we run the bucket operation in a background thread.
         let handle = scope.spawn(move || {
-            let mut builder = sender.repo_builder();
+            let tracker = Tracker::new(name, SharedProgress::new());
+            let mut builder = tracker.repo_builder();
 
             // Add the bucket.
             shovel.buckets.add(name, url, Some(&mut builder))?;
 
-            // Signal to the tracker that the operation is done.
-            sender.close();
-
             Ok(())
         });
-
-        // Show a progress bar on the main thread until the sender is closed.
-        receiver.show_progress(Some(name));
 
         // Wait for the background thread to join and return the error, if any.
         handle.join().unwrap()

@@ -1,35 +1,29 @@
-use std::thread;
-
 use clap;
 use eyre::WrapErr;
+use rayon::prelude::*;
 use shovel;
 use tabled;
 
 use crate::run::Run;
-use crate::tracker;
+use crate::tracker::{SharedProgress, Tracker};
 use crate::util;
 
-fn update_bucket(bucket: &mut shovel::Bucket, name: &str) -> shovel::Result<()> {
-    let (sender, receiver) = tracker::channel();
+fn update_bucket(bucket: &mut shovel::Bucket, progress: SharedProgress) -> eyre::Result<git2::Oid> {
+    let tracker = Tracker::new(bucket.name().as_str(), progress);
 
-    thread::scope(|scope| {
-        let handle = scope.spawn(move || {
-            let mut fo = sender.fetch_options();
-            let mut cb = sender.checkout_builder();
-            // According to the git2 pull example, not including this option causes the working directory to not update.
-            cb.force();
+    let mut fo = tracker.fetch_options();
+    let mut cb = tracker.checkout_builder();
+    // According to the git2 pull example, not including this option causes the working directory to not update.
+    cb.force();
 
-            bucket.pull(Some(&mut fo), Some(&mut cb))?;
+    // Save the original HEAD commit before pulling.
+    let head = bucket.commit()?.id();
 
-            sender.close();
+    bucket
+        .pull(Some(&mut fo), Some(&mut cb))
+        .wrap_err_with(|| format!("Failed to update bucket {}", bucket.name()))?;
 
-            Ok(())
-        });
-
-        receiver.show_progress(Some(name));
-
-        handle.join().unwrap()
-    })
+    Ok(head)
 }
 
 #[derive(tabled::Tabled, Debug)]
@@ -62,26 +56,46 @@ pub struct UpdateCommand {}
 
 impl Run for UpdateCommand {
     fn run(&self, shovel: &mut shovel::Shovel) -> eyre::Result<()> {
-        for bucket in shovel.buckets.iter()? {
-            let mut bucket = bucket?;
-            let name = bucket.name();
+        let progress = SharedProgress::new();
 
-            // Save the original HEAD commit before pulling.
-            let old_head = bucket.commit()?.id();
+        let results: Vec<_> = shovel
+            .buckets
+            .iter()?
+            .par_bridge()
+            .map(|bucket| -> eyre::Result<(git2::Oid, shovel::Bucket)> {
+                let mut bucket = bucket?;
 
-            // Pull changes into the bucket.
-            update_bucket(&mut bucket, &name)
-                .wrap_err_with(|| format!("Failed to update bucket {}", name))?;
+                // Update the bucket and get the original HEAD.
+                let head = update_bucket(&mut bucket, progress.clone())?;
 
-            let mut commits = bucket
-                .commits(old_head)?
+                Ok((head, bucket))
+            })
+            .collect();
+
+        for result in results {
+            println!();
+
+            let (head, bucket) = result?;
+
+            // Get the commits between the previous and current HEAD.
+            let mut updates = bucket
+                .commits(head)?
                 .map(|commit| UpdateInfo::new(&commit))
                 .peekable();
 
-            if commits.peek().is_some() {
-                println!("{}:\n{}\n", name, util::tableify(commits, false));
+            // If there are any commits, show them.
+            if updates.peek().is_some() {
+                println!(
+                    "{} has been updated:\n{}",
+                    bucket.name(),
+                    util::tableify(updates, false)
+                );
+            } else {
+                println!("{} is already up-to-date.", bucket.name());
             }
         }
+
+        println!();
 
         Ok(())
     }
