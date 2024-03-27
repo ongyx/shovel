@@ -1,4 +1,5 @@
 mod commands;
+mod multi_progress;
 mod run;
 mod tracker;
 mod util;

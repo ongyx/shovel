@@ -4,13 +4,15 @@ use rayon::prelude::*;
 use shovel;
 use tabled;
 
+use crate::multi_progress;
 use crate::run::Run;
-use crate::tracker::{SharedProgress, Tracker};
+use crate::tracker;
 use crate::util;
 
-fn update_bucket(bucket: &mut shovel::Bucket, progress: SharedProgress) -> eyre::Result<git2::Oid> {
-    let tracker = Tracker::new(bucket.name().as_str(), progress);
-
+fn update_bucket(
+    bucket: &mut shovel::Bucket,
+    tracker: tracker::Tracker,
+) -> eyre::Result<git2::Oid> {
     let mut fo = tracker.fetch_options();
     let mut cb = tracker.checkout_builder();
     // According to the git2 pull example, not including this option causes the working directory to not update.
@@ -56,23 +58,42 @@ pub struct UpdateCommand {}
 
 impl Run for UpdateCommand {
     fn run(&self, shovel: &mut shovel::Shovel) -> eyre::Result<()> {
-        let progress = SharedProgress::new();
+        let buckets = shovel.buckets.iter()?;
 
-        let results: Vec<_> = shovel
-            .buckets
-            .iter()?
-            .par_bridge()
-            .map(|bucket| -> eyre::Result<(git2::Oid, shovel::Bucket)> {
-                let mut bucket = bucket?;
+        let mut results: Option<Vec<_>> = None;
 
-                // Update the bucket and get the original HEAD.
-                let head = update_bucket(&mut bucket, progress.clone())?;
+        rayon::scope(|scope| {
+            let (tx, rx) = multi_progress::channel();
 
-                Ok((head, bucket))
-            })
-            .collect();
+            scope.spawn(|_| {
+                // Take ownership of `tx` to let it be used in the closure below.
+                // https://docs.rs/rayon/latest/rayon/fn.scope.html
+                let tx = tx;
 
-        for result in results {
+                let updated = buckets.par_bridge().map(
+                    |bucket| -> eyre::Result<(git2::Oid, shovel::Bucket)> {
+                        let tx = tx.clone();
+
+                        let mut bucket = bucket?;
+
+                        let tracker = tracker::Tracker::new(tx.clone(), bucket.name().as_str());
+
+                        // Update the bucket and get the original HEAD.
+                        let head = update_bucket(&mut bucket, tracker)?;
+
+                        Ok((head, bucket))
+                    },
+                );
+
+                results = Some(updated.collect());
+            });
+
+            // Show the progress while the buckets are updating.
+            rx.show();
+        });
+
+        // SAFETY: results will not be None after the scope closes.
+        for result in results.unwrap() {
             println!();
 
             let (head, bucket) = result?;

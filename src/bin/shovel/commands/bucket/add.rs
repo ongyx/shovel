@@ -7,14 +7,17 @@ use owo_colors::OwoColorize;
 use shovel;
 
 use crate::commands::bucket::known;
+use crate::multi_progress;
 use crate::run::Run;
-use crate::tracker::{SharedProgress, Tracker};
+use crate::tracker::Tracker;
 
 fn add_bucket(shovel: &mut shovel::Shovel, name: &str, url: &str) -> shovel::Result<()> {
     thread::scope(|scope| {
+        let (tx, rx) = multi_progress::channel();
+
         // Since updates on progress are sent over a channel, we run the bucket operation in a background thread.
-        let handle = scope.spawn(move || {
-            let tracker = Tracker::new(name, SharedProgress::new());
+        let handle = scope.spawn(|| {
+            let tracker = Tracker::new(tx, name);
             let mut builder = tracker.repo_builder();
 
             // Add the bucket.
@@ -22,6 +25,9 @@ fn add_bucket(shovel: &mut shovel::Shovel, name: &str, url: &str) -> shovel::Res
 
             Ok(())
         });
+
+        // Show the progress.
+        rx.show();
 
         // Wait for the background thread to join and return the error, if any.
         handle.join().unwrap()
