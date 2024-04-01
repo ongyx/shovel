@@ -54,35 +54,34 @@ impl VerifyCommand {
     ) -> eyre::Result<impl Iterator<Item = Verified> + 'b> {
         use Verified::*;
 
-        let verified = bucket
-            .manifests()?
-            .map(move |(name, manifest)| -> Verified {
-                // Check if the manifest parsed successfully.
-                match manifest {
-                    Ok(_) => {
-                        // Only verify against the schema if successfully parsed.
-                        if self.schema {
-                            let path = bucket.manifest_path(&name);
-                            let value = shovel::json::from_file(path).unwrap();
+        let name = bucket.name();
+        let verified = bucket.manifests()?.map(move |item| -> Verified {
+            // Check if the manifest parsed successfully.
+            match item.manifest {
+                Ok(_) => {
+                    // Only verify against the schema if successfully parsed.
+                    if self.schema {
+                        let path = bucket.manifest_path(&name);
+                        let value = shovel::json::from_file(path).unwrap();
 
-                            if let Err(errors) = schema().validate(&value) {
-                                return Failure {
-                                    name,
-                                    error: eyre::eyre!("Failed to validate against JSON Schema"),
-                                    schema_errors: format_schema_errors(errors),
-                                };
+                        if let Err(errors) = schema().validate(&value) {
+                            return Failure {
+                                name: name.clone(),
+                                error: eyre::eyre!("Failed to validate against JSON Schema"),
+                                schema_errors: format_schema_errors(errors),
                             };
-                        }
-
-                        Success
+                        };
                     }
-                    Err(error) => Failure {
-                        name,
-                        error: error.into(),
-                        schema_errors: vec![],
-                    },
+
+                    Success
                 }
-            });
+                Err(error) => Failure {
+                    name: name.clone(),
+                    error: error.into(),
+                    schema_errors: vec![],
+                },
+            }
+        });
 
         Ok(verified)
     }

@@ -16,23 +16,18 @@ pub struct CatCommand {
 
 impl CatCommand {
     fn path(&self, shovel: &mut shovel::Shovel) -> shovel::Result<PathBuf> {
+        use shovel::Error;
+
         let (bucket_name, manifest_name) = util::parse_app(&self.app);
 
-        let items: Vec<_> = shovel
-            .buckets
-            .search(|bucket, manifest| {
-                (bucket_name.is_empty() || bucket == bucket_name) && manifest == manifest_name
-            })?
-            .collect();
+        let mut search = shovel.buckets.search_all(
+            |bucket| bucket_name.is_empty() || (bucket.name() == bucket_name),
+            |manifest| manifest == manifest_name,
+        )?;
 
-        match items.len() {
-            0 => Err(shovel::Error::AppNotFound),
-            _ => {
-                let item = &items[0];
-                let path = item.bucket.manifest_path(&item.name);
-                Ok(path)
-            }
-        }
+        let (bucket, item) = search.next().ok_or(Error::AppNotFound)?;
+
+        Ok(bucket.manifest_path(&item.name))
     }
 }
 

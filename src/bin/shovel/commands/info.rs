@@ -29,8 +29,7 @@ impl Info {
     fn new(shovel: &mut shovel::Shovel, name: &str) -> shovel::Result<Self> {
         use shovel::Error::AppNotFound;
 
-        let item = shovel.buckets.manifest(name)?;
-        let bucket = item.bucket;
+        let (bucket, item) = shovel.buckets.manifest(name)?;
         let manifest = item.manifest?;
 
         let license = manifest.license.to_string();

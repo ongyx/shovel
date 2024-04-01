@@ -43,6 +43,6 @@ Task list for feature parity with Scoop.
 * [ ] status
 * [ ] unhold
 * [ ] uninstall
-* [ ] update
+* [*] update
 * [ ] virustotal
 * [ ] which

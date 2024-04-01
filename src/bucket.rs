@@ -1,7 +1,9 @@
 use std::fs;
 use std::io;
+use std::iter::{self, Flatten, Repeat, Zip};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::vec;
 
 use git2;
 use git2::build;
@@ -20,18 +22,6 @@ where
         Error::Io(ioerr) if ioerr.kind() == io::ErrorKind::NotFound => Error::ManifestNotFound,
         _ => err,
     })
-}
-
-/// A manifest in a bucket.
-pub struct Item {
-    /// The bucket which the manifest originated from.
-    pub bucket: Arc<Bucket>,
-
-    /// The manifest's name.
-    pub name: String,
-
-    /// The parsed manifest.
-    pub manifest: Result<Manifest>,
 }
 
 /// A collection of manifests in a Git repository.
@@ -125,24 +115,8 @@ impl Bucket {
     /// # Arguments
     ///
     /// * `since` - The commit ID to yield until.
-    pub fn commits(&self, since: git2::Oid) -> Result<impl Iterator<Item = git2::Commit>> {
-        // Create a revwalk to iterate commits from HEAD chronologically.
-        let mut revwalk = self.repo.revwalk()?;
-        revwalk.set_sorting(git2::Sort::TIME)?;
-        revwalk.push_head()?;
-
-        let commits = revwalk.map_while(move |res| {
-            // Ignore invalid OIDs.
-            let oid = res.ok()?;
-
-            if oid != since {
-                self.repo.find_commit(oid).ok()
-            } else {
-                None
-            }
-        });
-
-        Ok(commits)
+    pub fn commits<'c>(&'c self, since: git2::Oid) -> Result<Commits<'c>> {
+        Commits::new(&self.repo, since)
     }
 
     /// Parses and yields each manifest in the bucket as (name, manifest) where predicate(name) returns true.
@@ -150,48 +124,18 @@ impl Bucket {
     /// # Arguments
     ///
     /// `predicate` - A predicate function that determines if a manifest should be yielded.
-    pub fn search<P>(
-        &self,
-        predicate: P,
-    ) -> Result<impl Iterator<Item = (String, Result<Manifest>)>>
+    pub fn search<P>(&self, predicate: P) -> Result<Search<P>>
     where
         P: Fn(&str) -> bool,
     {
         let dir = self.dir().join("bucket");
-        let entries = fs::read_dir(dir)?;
 
-        let manifests = entries
-            // Discard errors.
-            .filter_map(|res| res.ok())
-            // Discard paths not ending in '.json'.
-            .filter_map(|entry| {
-                let path = entry.path();
-                let ext = path.extension().unwrap_or_default();
-
-                if ext == "json" {
-                    Some(path)
-                } else {
-                    None
-                }
-            })
-            // Discard manifests based on the predicate.
-            .filter_map(move |path| {
-                // Take only the file stem (i.e., 'example' for 'example.json')
-                let name = util::osstr_to_string(path.file_stem().unwrap());
-
-                if predicate(&name) {
-                    Some((name, manifest_from_file(path)))
-                } else {
-                    None
-                }
-            });
-
-        Ok(manifests)
+        Search::new(dir, predicate)
     }
 
     /// Parses and yields each manifest in the bucket as (name, manifest).
     /// This is a convenience function over `Self::search`.
-    pub fn manifests(&self) -> Result<impl Iterator<Item = (String, Result<Manifest>)>> {
+    pub fn manifests(&self) -> Result<Search<fn(&str) -> bool>> {
         self.search(|_| true)
     }
 
@@ -352,6 +296,180 @@ impl Bucket {
     }
 }
 
+/// An iterator over buckets. Created by the `iter` method on `Buckets`.
+pub struct Iter {
+    dirs: util::Dirs,
+}
+
+impl Iter {
+    fn new<P>(dir: P) -> Result<Self>
+    where
+        P: AsRef<Path>,
+    {
+        Ok(Self {
+            dirs: util::dirs(dir)?,
+        })
+    }
+}
+
+impl Iterator for Iter {
+    type Item = Result<Bucket>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let dir = self.dirs.next()?;
+
+        Some(Bucket::open(dir))
+    }
+}
+
+/// An iterator over commits since a specific commit. Created by the `commits` method on `Buckets`.
+pub struct Commits<'c> {
+    repo: &'c git2::Repository,
+    revwalk: git2::Revwalk<'c>,
+    since: git2::Oid,
+}
+
+impl<'c> Commits<'c> {
+    fn new(repo: &'c git2::Repository, since: git2::Oid) -> Result<Self> {
+        // Create a revwalk to iterate commits from HEAD chronologically.
+        let mut revwalk = repo.revwalk()?;
+        revwalk.set_sorting(git2::Sort::TIME)?;
+        revwalk.push_head()?;
+
+        Ok(Self {
+            repo,
+            revwalk,
+            since,
+        })
+    }
+}
+
+impl<'c> Iterator for Commits<'c> {
+    type Item = git2::Commit<'c>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        // Get the next OID.
+        let oid = self.revwalk.next()?.ok()?;
+
+        if oid != self.since {
+            // Return the commit.
+            // NOTE: Since the OID was retreived through revwalk, this should not be None.
+            self.repo.find_commit(oid).ok()
+        } else {
+            // The `since` commit has been reached.
+            None
+        }
+    }
+}
+
+/// A manifest in a bucket.
+pub struct SearchItem {
+    /// The manifest's name.
+    pub name: String,
+
+    /// The parsed manifest.
+    pub manifest: Result<Manifest>,
+}
+
+pub struct Search<P>
+where
+    P: Fn(&str) -> bool,
+{
+    entries: fs::ReadDir,
+    predicate: P,
+}
+
+impl<P> Search<P>
+where
+    P: Fn(&str) -> bool,
+{
+    fn new<PATH>(dir: PATH, predicate: P) -> Result<Self>
+    where
+        PATH: AsRef<Path>,
+    {
+        let entries = fs::read_dir(dir)?;
+
+        Ok(Self { entries, predicate })
+    }
+}
+
+impl<P> Iterator for Search<P>
+where
+    P: Fn(&str) -> bool,
+{
+    type Item = SearchItem;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.entries.find_map(|res| {
+            let path = res.ok()?.path();
+
+            let ext = path.extension().unwrap_or_default();
+
+            // If the path does not end in '.json', it is not a manifest.
+            if ext != "json" {
+                return None;
+            }
+
+            // Take only the file stem (i.e., 'example' for 'example.json')
+            let name = util::osstr_to_string(path.file_stem().unwrap());
+
+            // If the predicate does not match, the manifest is skipped.
+            if !(self.predicate)(&name) {
+                return None;
+            }
+
+            Some(SearchItem {
+                name,
+                manifest: manifest_from_file(path),
+            })
+        })
+    }
+}
+
+pub struct SearchAll<P>
+where
+    P: Fn(&str) -> bool + Copy,
+{
+    inner: Flatten<vec::IntoIter<Zip<Repeat<Arc<Bucket>>, Search<P>>>>,
+}
+
+impl<P> SearchAll<P>
+where
+    P: Fn(&str) -> bool + Copy,
+{
+    fn new<I>(buckets: I, predicate: P) -> Result<Self>
+    where
+        I: Iterator<Item = Bucket>,
+    {
+        let manifests: Result<Vec<_>> = buckets
+            // Since each item has a handle to the bucket, the handle is wrapped in an Arc to avoid duplication.
+            .map(move |bucket| {
+                // Since each item has a handle to the bucket, the handle is wrapped in an Arc to avoid duplication.
+                let bucket = Arc::new(bucket);
+                let manifests = bucket.search(predicate)?;
+
+                // Zip the bucket and its manifests together.
+                Ok(iter::repeat(bucket).zip(manifests))
+            })
+            .collect();
+
+        let manifests = manifests?.into_iter().flatten();
+
+        Ok(Self { inner: manifests })
+    }
+}
+
+impl<P> Iterator for SearchAll<P>
+where
+    P: Fn(&str) -> bool + Copy,
+{
+    type Item = (Arc<Bucket>, SearchItem);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner.next()
+    }
+}
+
 /// A bucket manager.
 ///
 /// Buckets are stored as sub-directories. For example:
@@ -379,10 +497,8 @@ impl Buckets {
     }
 
     /// Yields all buckets.
-    pub fn iter(&self) -> Result<impl Iterator<Item = Result<Bucket>>> {
-        let buckets = util::subdirs(self.dir.clone())?.map(|dir| Bucket::open(dir));
-
-        Ok(buckets)
+    pub fn iter(&self) -> Result<Iter> {
+        Iter::new(self.dir.clone())
     }
 
     /// Returns the path to a bucket.
@@ -459,51 +575,28 @@ impl Buckets {
         }
     }
 
-    /// Parses and yields each manifest in all buckets where predicate(bucket_name, manifest_name) returns true.
+    /// Parses and yields each manifest in all buckets where filter(bucket) and predicate(manifest_name) returns true.
     ///
     /// # Arguments
     ///
+    /// * `filter` - A filter function that determins if the bucket should be searched.
     /// * `predicate` - A predicate function that determines if the manifest should be yielded.
-    pub fn search<P>(&self, predicate: P) -> Result<impl Iterator<Item = Item>>
+    pub fn search_all<F, P>(&self, filter: F, predicate: P) -> Result<SearchAll<P>>
     where
-        P: Fn(&str, &str) -> bool + Copy,
+        F: Fn(&Bucket) -> bool,
+        P: Fn(&str) -> bool + Copy,
     {
-        let buckets: Result<Vec<_>> = self
-            .iter()?
-            .map(move |res| {
-                // If the bucket opened successfully, search for manifests.
-                res.and_then(move |bucket| {
-                    // Since each item has a handle to the bucket, the handle is wrapped in an Arc to avoid duplication.
-                    let bucket = Arc::new(bucket);
-                    let bucket_name = bucket.name();
+        let buckets: Result<Vec<_>> = self.iter()?.collect();
 
-                    let manifests = bucket
-                        .search(move |manifest_name| predicate(&bucket_name, manifest_name))?;
+        let buckets = buckets?.into_iter().filter(filter);
 
-                    Ok((bucket, manifests))
-                })
-            })
-            .collect();
-
-        let manifests = buckets?
-            .into_iter()
-            .map(|(bucket, manifests)| {
-                // For each manifest, wrap it into an item.
-                manifests.map(move |(name, manifest)| Item {
-                    bucket: bucket.clone(),
-                    name,
-                    manifest,
-                })
-            })
-            .flatten();
-
-        Ok(manifests)
+        SearchAll::new(buckets, predicate)
     }
 
     /// Parses and yields each manifest in all buckets.
     /// This is a convenience function over `Self::search`.
-    pub fn manifests(&self) -> Result<impl Iterator<Item = Item>> {
-        self.search(|_, _| true)
+    pub fn manifests(&self) -> Result<SearchAll<fn(&str) -> bool>> {
+        self.search_all(|_| true, |_| true)
     }
 
     /// Parses and returns a single manifest in any bucket.
@@ -511,13 +604,12 @@ impl Buckets {
     /// # Arguments
     ///
     /// * `name`- The name of the manifest.
-    pub fn manifest(&self, name: &str) -> Result<Item> {
-        let mut search = self.search(|_, manifest_name| manifest_name == name)?;
+    pub fn manifest(&self, name: &str) -> Result<(Arc<Bucket>, SearchItem)> {
+        let mut search = self.search_all(|_| true, |manifest_name| manifest_name == name)?;
 
         search.next().ok_or(Error::ManifestNotFound)
     }
 }
-
 #[cfg(test)]
 mod tests {
     use std::fs;
@@ -591,7 +683,7 @@ mod tests {
     fn buckets_manifests() {
         let buckets = Buckets::new(buckets_dir());
 
-        for item in buckets.manifests().unwrap() {
+        for (_, item) in buckets.manifests().unwrap() {
             item.manifest.unwrap();
         }
     }

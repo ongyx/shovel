@@ -1,7 +1,10 @@
+use std::sync::Arc;
+
 use clap;
 use eyre;
 use eyre::WrapErr;
 use shovel;
+use shovel::bucket;
 use tabled;
 
 use crate::run::Run;
@@ -17,7 +20,7 @@ struct SearchInfo {
 }
 
 impl SearchInfo {
-    fn new(item: shovel::Item) -> shovel::Result<Self> {
+    fn new(bucket: Arc<bucket::Bucket>, item: bucket::SearchItem) -> shovel::Result<Self> {
         let manifest = item.manifest?;
 
         let version = manifest.version.clone();
@@ -29,7 +32,7 @@ impl SearchInfo {
         Ok(SearchInfo {
             name: item.name,
             version,
-            bucket: item.bucket.name(),
+            bucket: bucket.name(),
             binaries,
         })
     }
@@ -49,11 +52,12 @@ impl Run for SearchCommand {
 
         let apps: shovel::Result<Vec<_>> = shovel
             .buckets
-            .search(|bucket, manifest| {
-                (bucket_name.is_empty() || bucket == bucket_name) && regex.is_match(manifest)
-            })
+            .search_all(
+                |bucket| bucket_name.is_empty() || bucket.name() == bucket_name,
+                |manifest_name| regex.is_match(manifest_name),
+            )
             .wrap_err("Search failed")?
-            .map(|item| SearchInfo::new(item))
+            .map(|(bucket, item)| SearchInfo::new(bucket, item))
             .collect();
 
         let apps = apps?;

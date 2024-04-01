@@ -1,5 +1,7 @@
 use std::ffi;
 use std::fs;
+use std::io;
+use std::iter;
 use std::path::{Path, PathBuf};
 use std::time;
 
@@ -15,32 +17,43 @@ pub fn osstr_to_string(osstr: &ffi::OsStr) -> String {
     osstr.to_str().unwrap().to_owned()
 }
 
+/// An iterator over directories in a path. Created by the `subdirs` function.
+pub struct Dirs {
+    inner: iter::FilterMap<fs::ReadDir, fn(io::Result<fs::DirEntry>) -> Option<PathBuf>>,
+}
+
+impl Iterator for Dirs {
+    type Item = PathBuf;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner.next()
+    }
+}
+
 /// Yields directories in a path.
 ///
 /// # Arguments
 ///
 /// * `path` - The path.
-pub fn subdirs<P>(path: P) -> Result<impl Iterator<Item = PathBuf>>
+pub fn dirs<P>(path: P) -> Result<Dirs>
 where
     P: AsRef<Path>,
 {
-    let dirs = fs::read_dir(path)?
-        // Discard errors.
-        .filter_map(|res| res.ok())
-        .filter_map(|entry| {
-            let path = entry.path();
+    fn entry_to_path(result: io::Result<fs::DirEntry>) -> Option<PathBuf> {
+        let path = result.ok()?.path();
 
-            if path.is_dir() {
-                Some(path)
-            } else {
-                None
-            }
-        });
+        if path.is_dir() {
+            Some(path)
+        } else {
+            None
+        }
+    }
 
-    Ok(dirs)
+    Ok(Dirs {
+        inner: fs::read_dir(path)?.filter_map(entry_to_path),
+    })
 }
 
-/// Returns the modification time of a path as a UNIX timestamp.
 pub fn mod_time<P>(path: P) -> Result<Timestamp>
 where
     P: AsRef<Path>,

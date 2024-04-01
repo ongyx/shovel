@@ -1,4 +1,5 @@
 use std::io;
+use std::iter::Filter;
 use std::path::{Path, PathBuf};
 
 use crate::error::{Error, Result};
@@ -95,6 +96,81 @@ impl App {
     }
 }
 
+/// An iterator over apps. Created by the `iter` method on `Apps`.
+pub struct Iter {
+    dirs: util::Dirs,
+}
+
+impl Iter {
+    fn new<P>(dir: P) -> Result<Self>
+    where
+        P: AsRef<Path>,
+    {
+        let dirs = util::dirs(dir)?;
+
+        Ok(Self { dirs })
+    }
+}
+
+impl Iterator for Iter {
+    type Item = (String, Result<App>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let mut dir = self.dirs.next()?;
+
+        // Obtain the name of the app *before* pushing,
+        // otherwise it would just be `current`.
+        let name = util::osstr_to_string(dir.file_name().unwrap());
+
+        dir.push("current");
+
+        // The 'current' directory may not exist if the app is corrupted.
+        let app = dir
+            .try_exists()
+            .map_err(|err| Error::from(err))
+            .and_then(|exists| {
+                if exists {
+                    Ok(App::open(dir))
+                } else {
+                    Err(Error::AppNotFound)
+                }
+            });
+
+        Some((name, app))
+    }
+}
+
+/// An iterator over version of a specific app. Created by the `versions` method on `Apps`.
+pub struct Versions {
+    dirs: Filter<util::Dirs, fn(&PathBuf) -> bool>,
+}
+
+impl Versions {
+    fn new<P>(dir: P) -> Result<Self>
+    where
+        P: AsRef<Path>,
+    {
+        // Explicitly cast the closure to a function pointer.
+        // This allows storing the iterator in the struct.
+        let filter_current: fn(&PathBuf) -> bool = |dir| dir.file_name().unwrap() != "current";
+
+        let dirs = util::dirs(dir)?.filter(filter_current);
+
+        Ok(Self { dirs })
+    }
+}
+
+impl Iterator for Versions {
+    type Item = App;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let dir = self.dirs.next()?;
+        let app = App::open(dir);
+
+        Some(app)
+    }
+}
+
 /// An app manager.
 ///
 /// Installed apps are stored as sub-directories with several versions,
@@ -129,43 +205,15 @@ impl Apps {
     }
 
     /// Yields the current version of each app.
-    pub fn iter(&self) -> Result<impl Iterator<Item = (String, Result<App>)>> {
-        let apps = util::subdirs(self.dir.clone())?.map(|mut dir| {
-            let name = util::osstr_to_string(dir.file_name().unwrap());
-
-            dir.push("current");
-
-            // The 'current' directory may not exist if the app is corrupted.
-            let app = dir
-                .try_exists()
-                .map_err(|err| Error::from(err))
-                .and_then(|exists| {
-                    if exists {
-                        Ok(App::open(dir))
-                    } else {
-                        Err(Error::AppNotFound)
-                    }
-                });
-
-            (name, app)
-        });
-
-        Ok(apps)
+    pub fn iter(&self) -> Result<Iter> {
+        Iter::new(self.dir.clone())
     }
 
     /// Yields the installed versions for an app. This does not include 'current'.
-    pub fn versions(&self, name: &str) -> Result<impl Iterator<Item = App>> {
-        let path = self.dir.join(name);
+    pub fn versions(&self, name: &str) -> Result<Versions> {
+        let dir = self.dir.join(name);
 
-        let versions = util::subdirs(path)?.filter_map(|dir| {
-            if dir.file_name().unwrap() != "current" {
-                Some(App::open(dir))
-            } else {
-                None
-            }
-        });
-
-        Ok(versions)
+        Versions::new(dir)
     }
 
     /// Returns the path to an app.

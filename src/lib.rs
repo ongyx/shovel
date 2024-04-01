@@ -12,7 +12,7 @@ mod test;
 mod util;
 
 pub use app::{App, Apps};
-pub use bucket::{Bucket, Buckets, Item};
+pub use bucket::{Bucket, Buckets};
 pub use config::Config;
 pub use error::{Error, Result};
 pub use manifest::Manifest;
