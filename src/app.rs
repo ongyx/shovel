@@ -1,13 +1,40 @@
-use std::io;
 use std::iter::Filter;
 use std::path::{Path, PathBuf};
+use std::{fs, io};
 
-use crate::error::{Error, Result};
+use thiserror;
+
 use crate::json;
-use crate::manifest::Arch;
-use crate::manifest::Manifest;
+use crate::manifest::{Arch, Manifest};
 use crate::timestamp::Timestamp;
 use crate::util;
+
+/// An app error.
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    /// An app does not exist.
+    #[error("App not found")]
+    NotFound,
+
+    /// An app's manifest does not exist.
+    #[error("Manifest not found")]
+    ManifestNotFound,
+
+    /// An app's metadata does not exist.
+    #[error("Metadata not found")]
+    MetadataNotFound,
+
+    /// An IO error occurred.
+    #[error(transparent)]
+    Io(#[from] io::Error),
+
+    /// A JSON (de)serialization error occurred.
+    #[error(transparent)]
+    Json(#[from] json::Error),
+}
+
+/// An app result.
+pub type Result<T> = std::result::Result<T, Error>;
 
 json::json_struct! {
     /// Metadata on an installed app.
@@ -51,18 +78,14 @@ impl App {
 
     /// Returns the last modified time of the app as a UNIX timestamp.
     pub fn timestamp(&self) -> Result<Timestamp> {
-        util::mod_time(self.dir())
+        let timestamp = util::mod_time(self.dir())?;
+
+        Ok(timestamp)
     }
 
     /// Returns the path to the app's manifest, or None if it does not exist.
-    pub fn manifest_path(&self) -> Option<PathBuf> {
-        let path = self.dir().join("manifest.json");
-
-        if path.exists() {
-            Some(path)
-        } else {
-            None
-        }
+    pub fn manifest_path(&self) -> PathBuf {
+        self.dir().join("manifest.json")
     }
 
     /// Parses and returns the app's manifest.
@@ -71,9 +94,14 @@ impl App {
     ///
     /// If the manifest file does not exist, `Error::ManifestNotFound` is returned.
     pub fn manifest(&self) -> Result<Manifest> {
-        let path = self.manifest_path().ok_or(Error::ManifestNotFound)?;
+        let file = fs::File::open(self.manifest_path()).map_err(|err| match err.kind() {
+            io::ErrorKind::NotFound => Error::ManifestNotFound,
+            _ => err.into(),
+        })?;
 
-        json::from_file(path)
+        let manifest = json::from_reader(file)?;
+
+        Ok(manifest)
     }
 
     /// Returns the path to the app's metadata.
@@ -87,12 +115,14 @@ impl App {
     ///
     /// If the metadata file does not exist, `Error::MetadataNotFound` is returned.
     pub fn metadata(&self) -> Result<Metadata> {
-        let path = self.metadata_path();
+        let file = fs::File::open(self.metadata_path()).map_err(|err| match err.kind() {
+            io::ErrorKind::NotFound => Error::MetadataNotFound,
+            _ => err.into(),
+        })?;
 
-        json::from_file(&path).map_err(|err| match err {
-            Error::Io(ioerr) if ioerr.kind() == io::ErrorKind::NotFound => Error::MetadataNotFound,
-            _ => err,
-        })
+        let metadata = json::from_reader(file)?;
+
+        Ok(metadata)
     }
 }
 
@@ -132,7 +162,7 @@ impl Iterator for Iter {
                 if exists {
                     Ok(App::open(dir))
                 } else {
-                    Err(Error::AppNotFound)
+                    Err(Error::NotFound)
                 }
             });
 
@@ -238,14 +268,14 @@ impl Apps {
     ///
     /// # Errors
     ///
-    /// If the app does not exist, `Error::AppNotFound` is returned.
+    /// If the app does not exist, `Error::NotFound` is returned.
     pub fn open(&self, name: &str, version: &str) -> Result<App> {
         let dir = self.path(name, version);
 
         if dir.try_exists()? {
             Ok(App::open(dir))
         } else {
-            Err(Error::AppNotFound)
+            Err(Error::NotFound)
         }
     }
 

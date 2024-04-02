@@ -1,48 +1,28 @@
 use std::io;
 
-use git2;
-use serde_json;
-use serde_path_to_error;
+use crate::app;
+use crate::bucket;
+use crate::json;
 
-/// A catch-all Shovel error.
-#[derive(thiserror::Error, Debug)]
+/// A catch-all error.
+#[derive(Debug, thiserror::Error)]
 pub enum Error {
-    /// A bucket does not exist.
-    #[error("Bucket not found")]
-    BucketNotFound,
-
-    /// A bucket exists.
-    #[error("Bucket already exists")]
-    BucketExists,
-
-    /// A manifest does not exist.
-    #[error("Manifest not found")]
-    ManifestNotFound,
-
-    /// A manifest is not commited.
-    #[error("Manifest not commited in Git repository")]
-    ManifestNotCommited,
-
-    /// An app does not exist.
-    #[error("App not found")]
-    AppNotFound,
-
-    /// An app's metadata does not exist.
-    #[error("Metadata not found")]
-    MetadataNotFound,
-
-    /// An underlying error with serde_json.
+    // An app error.
     #[error(transparent)]
-    Json(#[from] serde_path_to_error::Error<serde_json::Error>),
+    App(#[from] app::Error),
 
-    /// An underlying error with std::io.
+    // A bucket error.
+    #[error(transparent)]
+    Bucket(#[from] bucket::Error),
+
+    // An IO error.
     #[error(transparent)]
     Io(#[from] io::Error),
 
-    /// An underlying error with Git.
+    // A JSON error.
     #[error(transparent)]
-    Git(#[from] git2::Error),
+    Json(#[from] json::Error),
 }
 
-/// A Shovel result.
+/// A catch-all result.
 pub type Result<T> = std::result::Result<T, Error>;

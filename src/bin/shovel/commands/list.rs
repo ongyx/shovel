@@ -1,6 +1,7 @@
 use clap;
 use eyre::WrapErr;
 use shovel;
+use shovel::app;
 use tabled;
 
 use crate::run::Run;
@@ -17,21 +18,34 @@ struct ListInfo {
 }
 
 impl ListInfo {
-    fn new(name: &str, app: &shovel::App) -> shovel::Result<Self> {
-        let manifest = app.manifest()?;
-        let metadata = app.metadata()?;
+    fn new(name: &str, app: app::Result<shovel::App>) -> Self {
+        // Obtain the app's info if it didn't error out.
+        let info = app.and_then(|app| {
+            let manifest = app.manifest()?;
+            let metadata = app.metadata()?;
 
-        let version = manifest.version;
-        let bucket = metadata.bucket;
-        let updated = app.timestamp()?.to_string();
+            let version = manifest.version;
+            let bucket = metadata.bucket;
+            let updated = app.timestamp()?.to_string();
 
-        Ok(Self {
-            name: name.to_owned(),
-            version,
-            bucket,
-            updated,
-            ..Default::default()
-        })
+            Ok(Self {
+                name: name.to_owned(),
+                version,
+                bucket,
+                updated,
+                ..Default::default()
+            })
+        });
+
+        match info {
+            Ok(info) => info,
+            // Wrap the error infomation.
+            Err(err) => Self {
+                name: name.to_owned(),
+                info: err.to_string(),
+                ..Default::default()
+            },
+        }
     }
 }
 
@@ -39,23 +53,6 @@ impl ListInfo {
 pub struct ListCommand {
     /// The apps to list as a regex. To specify a bucket, use the syntax `bucket/pattern`.
     query: Option<String>,
-}
-
-impl ListCommand {
-    fn app_info(&self, name: &str, app: shovel::Result<shovel::App>) -> ListInfo {
-        match app {
-            Ok(app) => ListInfo::new(&name, &app).unwrap_or_else(|_| ListInfo {
-                name: name.to_owned(),
-                // Use placeholders if the app's manifest/metadata cannot be read.
-                ..Default::default()
-            }),
-            Err(err) => ListInfo {
-                name: name.to_owned(),
-                info: err.to_string(),
-                ..Default::default()
-            },
-        }
-    }
 }
 
 impl Run for ListCommand {
@@ -72,7 +69,7 @@ impl Run for ListCommand {
         let apps: Vec<_> = shovel
             .apps
             .iter()?
-            .map(|(name, app)| self.app_info(&name, app))
+            .map(|(name, app)| ListInfo::new(&name, app))
             .filter_map(|info| {
                 // check the bucket and name.
                 if (bucket.is_empty() || info.bucket == bucket)

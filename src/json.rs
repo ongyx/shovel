@@ -1,27 +1,25 @@
-use std::fs;
 use std::io;
-use std::path;
 
 use serde;
 use serde::de;
 use serde_json;
 use serde_path_to_error;
 
-use crate::error::Result;
+/// A JSON (de)serialization error.
+pub type Error = serde_path_to_error::Error<serde_json::Error>;
 
-/// Deserialize a type `T` from a JSON file.
+/// Deserialize a type `T` from a JSON reader.
+/// The reader is wrapped in a buffered reader.
 ///
 /// # Arguments
 ///
 /// * `path` - The path to the JSON file.
-pub fn from_file<P, T>(path: P) -> Result<T>
+pub fn from_reader<R, T>(reader: R) -> Result<T, Error>
 where
-    P: AsRef<path::Path>,
+    R: io::Read,
     T: de::DeserializeOwned,
 {
-    let file = fs::File::open(path)?;
-
-    let reader = io::BufReader::new(file);
+    let reader = io::BufReader::new(reader);
     let de = &mut serde_json::Deserializer::from_reader(reader);
 
     let value = serde_path_to_error::deserialize(de)?;

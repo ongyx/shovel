@@ -41,7 +41,12 @@ impl Run for ListCommand {
         let info: shovel::Result<Vec<_>> = shovel
             .buckets
             .iter()?
-            .map(|res| res.and_then(|bucket| BucketInfo::new(&bucket)))
+            .map(|res| {
+                let bucket = res?;
+                let info = BucketInfo::new(&bucket)?;
+
+                Ok(info)
+            })
             .collect();
 
         println!("\n{}\n", util::tableify(info?, false));

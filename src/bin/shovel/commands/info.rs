@@ -2,6 +2,7 @@ use std::iter;
 
 use clap;
 use shovel;
+use shovel::app;
 use tabled;
 
 use crate::run::Run;
@@ -27,8 +28,6 @@ struct Info {
 
 impl Info {
     fn new(shovel: &mut shovel::Shovel, name: &str) -> shovel::Result<Self> {
-        use shovel::Error::AppNotFound;
-
         let (bucket, item) = shovel.buckets.manifest(name)?;
         let manifest = item.manifest?;
 
@@ -36,16 +35,25 @@ impl Info {
 
         let commit = bucket.manifest_commit(name)?;
 
-        let updated_at = shovel::Timestamp::from(commit.time()).to_string();
+        let (updated_at, updated_by) = match commit {
+            Some(commit) => {
+                let updated_at = shovel::Timestamp::from(commit.time()).to_string();
+                let updated_by = commit.author().name().unwrap().to_owned();
 
-        let updated_by = commit.author().name().unwrap().to_owned();
+                (updated_at, updated_by)
+            }
+            None => (
+                "(commit not found)".to_owned(),
+                "(author not found)".to_owned(),
+            ),
+        };
 
         let app = shovel.apps.open_current(name);
 
         let installed = match app {
             Ok(app) => Ok(app.manifest()?.version),
             // If the app is not found, do not propagate the error.
-            Err(AppNotFound) => Ok("(not installed)".to_owned()),
+            Err(app::Error::NotFound) => Ok("(not installed)".to_owned()),
             Err(err) => Err(err),
         }?;
 

@@ -1,4 +1,4 @@
-use std::sync;
+use std::{fs, sync};
 
 use clap;
 use eyre;
@@ -48,39 +48,53 @@ pub struct VerifyCommand {
 }
 
 impl VerifyCommand {
+    fn validate(&self, name: &str, bucket: &shovel::Bucket) -> shovel::Result<Verified> {
+        use Verified::*;
+
+        let path = bucket.manifest_path(&name);
+        let file = fs::File::open(path)?;
+
+        let value = shovel::json::from_reader(file)?;
+        let valid = schema().validate(&value);
+
+        let verified = valid.map_or_else(
+            |errs| Failure {
+                name: name.to_owned(),
+                error: eyre::eyre!("Failed to validate against JSON Schema"),
+                schema_errors: format_schema_errors(errs),
+            },
+            |_| Success,
+        );
+
+        Ok(verified)
+    }
+
     fn verify<'b>(
         &'b self,
         bucket: &'b shovel::Bucket,
-    ) -> eyre::Result<impl Iterator<Item = Verified> + 'b> {
+    ) -> eyre::Result<impl Iterator<Item = shovel::Result<Verified>> + 'b> {
         use Verified::*;
 
         let name = bucket.name();
-        let verified = bucket.manifests()?.map(move |item| -> Verified {
+        let verified = bucket.manifests()?.map(move |item| {
             // Check if the manifest parsed successfully.
-            match item.manifest {
+            let verified = match item.manifest {
                 Ok(_) => {
                     // Only verify against the schema if successfully parsed.
                     if self.schema {
-                        let path = bucket.manifest_path(&name);
-                        let value = shovel::json::from_file(path).unwrap();
-
-                        if let Err(errors) = schema().validate(&value) {
-                            return Failure {
-                                name: name.clone(),
-                                error: eyre::eyre!("Failed to validate against JSON Schema"),
-                                schema_errors: format_schema_errors(errors),
-                            };
-                        };
+                        self.validate(&name, bucket)?
+                    } else {
+                        Success
                     }
-
-                    Success
                 }
                 Err(error) => Failure {
                     name: name.clone(),
                     error: error.into(),
                     schema_errors: vec![],
                 },
-            }
+            };
+
+            Ok(verified)
         });
 
         Ok(verified)
@@ -106,6 +120,9 @@ impl Run for VerifyCommand {
             let mut failures = vec![];
 
             for verified in self.verify(&bucket)? {
+                // TODO: Show error instead of bailing?
+                let verified = verified?;
+
                 match verified {
                     Success => success += 1,
                     Failure {

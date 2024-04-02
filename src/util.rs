@@ -5,7 +5,6 @@ use std::iter;
 use std::path::{Path, PathBuf};
 use std::time;
 
-use crate::error::Result;
 use crate::timestamp::Timestamp;
 
 /// Converts an OsStr to a String.
@@ -35,7 +34,7 @@ impl Iterator for Dirs {
 /// # Arguments
 ///
 /// * `path` - The path.
-pub fn dirs<P>(path: P) -> Result<Dirs>
+pub fn dirs<P>(path: P) -> io::Result<Dirs>
 where
     P: AsRef<Path>,
 {
@@ -54,7 +53,7 @@ where
     })
 }
 
-pub fn mod_time<P>(path: P) -> Result<Timestamp>
+pub fn mod_time<P>(path: P) -> io::Result<Timestamp>
 where
     P: AsRef<Path>,
 {

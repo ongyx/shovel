@@ -4,6 +4,8 @@ mod run;
 mod tracker;
 mod util;
 
+use std::fs;
+
 use clap;
 use clap::Parser;
 use color_eyre;
@@ -32,8 +34,10 @@ fn main() -> eyre::Result<()> {
 
     let config: shovel::Config = match args.config {
         Some(config_path) => {
+            let config_file = fs::File::open(&config_path)?;
+
             // Read the config file.
-            shovel::json::from_file(&config_path)
+            shovel::json::from_reader(config_file)
                 .wrap_err_with(|| format!("Failed to parse config file {}", config_path))?
         }
         None => Default::default(),

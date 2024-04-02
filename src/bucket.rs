@@ -7,21 +7,55 @@ use std::vec;
 
 use git2;
 use git2::build;
+use thiserror;
 
-use crate::error::{Error, Result};
 use crate::json;
 use crate::manifest::Manifest;
 use crate::util;
+
+/// A bucket error.
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    /// A bucket does not exist.
+    #[error("Bucket not found")]
+    NotFound,
+
+    /// A bucket exists.
+    #[error("Bucket already exists")]
+    Exists,
+
+    /// A manifest does not exist.
+    #[error("Manifest not found")]
+    ManifestNotFound,
+
+    /// An IO error occurred.
+    #[error(transparent)]
+    Io(#[from] io::Error),
+
+    /// A JSON (de)serialization error occurred.
+    #[error(transparent)]
+    Json(#[from] json::Error),
+
+    /// An underlying error with Git.
+    #[error(transparent)]
+    Git(#[from] git2::Error),
+}
+
+/// A bucket result.
+pub type Result<T> = std::result::Result<T, Error>;
 
 fn manifest_from_file<P>(path: P) -> Result<Manifest>
 where
     P: AsRef<Path>,
 {
-    json::from_file(path).map_err(|err| match err {
-        // Map the NotFound IO error kind to ManifestNotFound.
-        Error::Io(ioerr) if ioerr.kind() == io::ErrorKind::NotFound => Error::ManifestNotFound,
-        _ => err,
-    })
+    let file = fs::File::open(path).map_err(|err| match err.kind() {
+        io::ErrorKind::NotFound => Error::ManifestNotFound,
+        _ => err.into(),
+    })?;
+
+    let manifest = json::from_reader(file)?;
+
+    Ok(manifest)
 }
 
 /// A collection of manifests in a Git repository.
@@ -162,7 +196,7 @@ impl Bucket {
     /// Returns the last commit made to a manifest.
     ///
     /// If the manifest has not been commited, None is returned.
-    pub fn manifest_commit(&self, name: &str) -> Result<git2::Commit> {
+    pub fn manifest_commit(&self, name: &str) -> Result<Option<git2::Commit>> {
         let path = self.manifest_path(name);
 
         // Ensure the manifest exists.
@@ -174,13 +208,13 @@ impl Bucket {
         let relpath = path.strip_prefix(&self.dir).unwrap();
 
         // Ensure the manifest is commited.
-        if !self.is_commited(relpath)? {
-            return Err(Error::ManifestNotCommited);
+        if self.is_commited(relpath)? {
+            let commit = self.find_commit(relpath)?;
+
+            Ok(Some(commit.expect("Manifest is commited")))
+        } else {
+            Ok(None)
         }
-
-        let commit = self.find_commit(relpath)?;
-
-        Ok(commit.expect("Manifest is commited"))
     }
 
     fn find_commit(&self, path: &Path) -> Result<Option<git2::Commit>> {
@@ -514,7 +548,7 @@ impl Buckets {
     ///
     /// # Errors
     ///
-    /// If the bucket does not exist, `Error::BucketNotFound` is returned.
+    /// If the bucket does not exist, `Error::NotFound` is returned.
     pub fn open(&self, name: &str) -> Result<Bucket> {
         let dir = self.path(name);
 
@@ -522,7 +556,7 @@ impl Buckets {
         if dir.try_exists()? {
             Bucket::open(dir)
         } else {
-            Err(Error::BucketNotFound)
+            Err(Error::NotFound)
         }
     }
 
@@ -550,7 +584,7 @@ impl Buckets {
 
             Bucket::clone(url, dir, builder)
         } else {
-            Err(Error::BucketExists)
+            Err(Error::Exists)
         }
     }
 
@@ -562,7 +596,7 @@ impl Buckets {
     ///
     /// # Errors
     ///
-    /// If the bucket does not exist, `Error::BucketNotFound` is returned.
+    /// If the bucket does not exist, `Error::NotFound` is returned.
     pub fn remove(&self, name: &str) -> Result<()> {
         let dir = self.path(name);
 
@@ -571,7 +605,7 @@ impl Buckets {
 
             Ok(())
         } else {
-            Err(Error::BucketNotFound)
+            Err(Error::NotFound)
         }
     }
 
