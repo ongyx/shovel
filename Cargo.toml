@@ -58,5 +58,5 @@ required-features = ["bin"]
 
 [profile.release]
 debug = true
-lto = true
-codegen-units = 1
+#lto = true
+#codegen-units = 1

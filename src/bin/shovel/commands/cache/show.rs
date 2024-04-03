@@ -39,7 +39,6 @@ impl ShowInfo {
 #[derive(clap::Args)]
 pub struct ShowCommand {
     /// The apps to show.
-    #[clap(short, long, num_args = 0..)]
     apps: Vec<String>,
 }
 
