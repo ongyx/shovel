@@ -4,15 +4,19 @@ A package manager for Windows, based off of [Scoop].
 
 ## Why?
 
-Development and maintenence on Scoop has slowed down significantly, in part due to feature stability.
-However, several feature requests are still open and there has not been a new version since 2022.
+While the current Powershell implmentation of Scoop works just fine, its speed leaves a lot to be desired.
+Therefore, I started this project with two goals in mind:
 
-Therefore, I created Shovel to determine if:
-* A Rust implementation would be more efficient than the current PowerShell implementation.
-* Said Rust implementation can achieve feature parity.
-* The backload of issues/pull requests/feature requests can be feasibly incorporated.
+* Improve the performance of Scoop operations, with some QoL on the side.
+* Maintain compatibility with existing Scoop installs.
 
-Shovel does *not* intend to completely replace Scoop, but rather to be an experiemental test bed.
+Shovel does *not* intend to completely replace Scoop, but aims to provide an alternate implementation.
+Users should be able to use Scoop and Shovel interchangably.
+
+## Contribution
+
+There are quite a few features to cover, so I'd appreciate PRs for those that are still unimplemented!
+Please refer to the [TODO](./TODO.md) list for details.
 
 ## Development
 
@@ -23,7 +27,7 @@ The following toolchains are supported:
 * x86: `i686-pc-windows-msvc`
 * ARM64: `aarch64-pc-windows-msvc`
 
-Your mileage may vary with the GNU toolchains.
+GNU toolchains should work, although I haven't tested them yet.
 
 ## License
 

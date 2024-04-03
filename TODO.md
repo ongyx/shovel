@@ -13,8 +13,8 @@ Task list for feature parity with Scoop.
   * [x] list
   * [x] known
   * [x] rm
-* [ ] cache
-  * [ ] show
+* [*] cache
+  * [*] show
   * [ ] rm
 * [x] cat
 * [ ] checkup
