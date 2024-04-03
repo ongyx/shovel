@@ -1,21 +1,19 @@
-use std::path;
-use std::sync;
+use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 use home;
 
-use crate::json::json_struct_nodefault;
-use crate::util::osstr_to_string;
+use crate::json;
+use crate::util;
 
-static DEFAULT_INSTALL_DIR: sync::OnceLock<path::PathBuf> = sync::OnceLock::new();
+static DEFAULT_INSTALL_DIR: OnceLock<PathBuf> = OnceLock::new();
 
 /// Returns the default installation directory.
-pub fn get_default_install_dir() -> &'static path::Path {
-    // A new PathBuf is allocated on PathBuf.join,
-    // but since this is only called once it does not matter.
+pub fn default_install_dir() -> &'static Path {
     DEFAULT_INSTALL_DIR.get_or_init(|| home::home_dir().unwrap().join("scoop"))
 }
 
-json_struct_nodefault! {
+json::json_struct_nodefault! {
     /// A set of configuration options for Shovel.
     /// Use `Default::default` for the defaults.
     pub struct Config {
@@ -26,25 +24,30 @@ json_struct_nodefault! {
 
 impl Config {
     /// Returns the installation directory as a path.
-    pub fn install_dir(&self) -> path::PathBuf {
-        path::PathBuf::from(&self.install_dir)
+    pub fn install_dir(&self) -> PathBuf {
+        PathBuf::from(&self.install_dir)
     }
 
     /// Returns the directory where apps are stored.
-    pub fn app_dir(&self) -> path::PathBuf {
+    pub fn app_dir(&self) -> PathBuf {
         self.install_dir().join("apps")
     }
 
     /// Returns the directory where buckets are stored.
-    pub fn bucket_dir(&self) -> path::PathBuf {
+    pub fn bucket_dir(&self) -> PathBuf {
         self.install_dir().join("buckets")
+    }
+
+    /// Returns the directory where app downloads are cached.
+    pub fn cache_dir(&self) -> PathBuf {
+        self.install_dir().join("cache")
     }
 }
 
 impl Default for Config {
     fn default() -> Self {
         Config {
-            install_dir: osstr_to_string(get_default_install_dir().as_os_str()),
+            install_dir: util::osstr_to_string(default_install_dir().as_os_str()),
         }
     }
 }

@@ -24,6 +24,10 @@ pub enum Error {
     #[error("Metadata not found")]
     MetadataNotFound,
 
+    /// An app's manifest version is invalid.
+    #[error("Version is invalid")]
+    InvalidVersion,
+
     /// An IO error occurred.
     #[error(transparent)]
     Io(#[from] io::Error),

@@ -1,4 +1,5 @@
 mod bucket;
+mod cache;
 mod cat;
 mod info;
 mod list;
@@ -16,6 +17,10 @@ pub enum Commands {
     /// Manage buckets
     #[command(subcommand)]
     Bucket(bucket::BucketCommands),
+
+    /// Manage the cache
+    #[command(subcommand)]
+    Cache(cache::CacheCommands),
 
     /// Show an app's manifest
     Cat(cat::CatCommand),
@@ -37,6 +42,7 @@ impl Run for Commands {
     fn run(&self, shovel: &mut shovel::Shovel) -> eyre::Result<()> {
         match self {
             Self::Bucket(cmds) => cmds.run(shovel),
+            Self::Cache(cmds) => cmds.run(shovel),
             Self::Cat(cmd) => cmd.run(shovel),
             Self::Info(cmd) => cmd.run(shovel),
             Self::List(cmd) => cmd.run(shovel),
