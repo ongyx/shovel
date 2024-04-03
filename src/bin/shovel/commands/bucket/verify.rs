@@ -1,7 +1,7 @@
 use std::{fs, sync};
 
 use clap;
-use eyre;
+use eyre::{self, WrapErr};
 use jsonschema;
 use owo_colors::OwoColorize;
 use shovel;
@@ -48,11 +48,12 @@ pub struct VerifyCommand {
 }
 
 impl VerifyCommand {
-    fn validate(&self, name: &str, bucket: &shovel::Bucket) -> shovel::Result<Verified> {
+    fn validate(&self, name: &str, bucket: &shovel::Bucket) -> eyre::Result<Verified> {
         use Verified::*;
 
         let path = bucket.manifest_path(&name);
-        let file = fs::File::open(path)?;
+        let file = fs::File::open(&path)
+            .wrap_err_with(|| format!("Failed to open manifest at {}", path.display()))?;
 
         let value = shovel::json::from_reader(file)?;
         let valid = schema().validate(&value);
@@ -72,7 +73,7 @@ impl VerifyCommand {
     fn verify<'b>(
         &'b self,
         bucket: &'b shovel::Bucket,
-    ) -> eyre::Result<impl Iterator<Item = shovel::Result<Verified>> + 'b> {
+    ) -> eyre::Result<impl Iterator<Item = eyre::Result<Verified>> + 'b> {
         use Verified::*;
 
         let name = bucket.name();
@@ -82,7 +83,7 @@ impl VerifyCommand {
                 Ok(_) => {
                     // Only verify against the schema if successfully parsed.
                     if self.schema {
-                        self.validate(&name, bucket)?
+                        self.validate(&item.name, bucket)?
                     } else {
                         Success
                     }
