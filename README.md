@@ -1,4 +1,4 @@
-# Shovel 🦀
+# Shovel
 
 A package manager for Windows, based off of [Scoop].
 
