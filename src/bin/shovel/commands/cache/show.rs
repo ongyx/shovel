@@ -37,9 +37,9 @@ impl ShowInfo {
 	}
 }
 
-#[derive(clap::Args)]
+#[derive(Clone, clap::Args)]
 pub struct ShowCommand {
-	/// The apps to show.
+	/// The apps to show in the cache
 	apps: Vec<String>,
 }
 
@@ -63,7 +63,7 @@ impl Run for ShowCommand {
 		let title = format!(
 			"Total: {} {}, {}",
 			count,
-			if count > 1 { "files" } else { "file" },
+			if count == 1 { "file" } else { "files" },
 			size.to_string_as(true),
 		);
 

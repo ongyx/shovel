@@ -15,7 +15,7 @@ Task list for feature parity with Scoop.
   * [x] rm
 * [*] cache
   * [*] show
-  * [ ] rm
+  * [*] rm
 * [x] cat
 * [ ] checkup
 * [ ] cleanup

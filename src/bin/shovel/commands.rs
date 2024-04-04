@@ -18,8 +18,7 @@ pub enum Commands {
 	#[command(subcommand)]
 	Bucket(bucket::BucketCommands),
 
-	/// Manage the cache
-	#[command(subcommand)]
+	/// Show or manage the cache
 	Cache(cache::CacheCommands),
 
 	/// Show an app's manifest
