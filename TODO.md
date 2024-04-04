@@ -13,9 +13,9 @@ Task list for feature parity with Scoop.
   * [x] list
   * [x] known
   * [x] rm
-* [*] cache
-  * [*] show
-  * [*] rm
+* [x] cache
+  * [x] show
+  * [x] rm
 * [x] cat
 * [ ] checkup
 * [ ] cleanup
@@ -43,6 +43,6 @@ Task list for feature parity with Scoop.
 * [ ] status
 * [ ] unhold
 * [ ] uninstall
-* [*] update
+* [x] update
 * [ ] virustotal
 * [ ] which
