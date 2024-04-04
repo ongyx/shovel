@@ -1,9 +1,9 @@
 use std::collections::HashSet;
-use std::fs;
 
 use bytesize;
 use clap;
 use owo_colors::OwoColorize;
+use shovel;
 
 use crate::run::Run;
 
@@ -16,32 +16,30 @@ pub struct RemoveCommand {
 
 impl Run for RemoveCommand {
 	fn run(&self, shovel: &mut shovel::Shovel) -> eyre::Result<()> {
-		// Get a hashset of the apps.
-		// SAFETY: apps is always at least one element long.
-		let apps: HashSet<String> = if self.apps[0] == "*" {
-			// An empty hashset means all apps should be removed.
-			HashSet::new()
+		let old_stat = shovel.cache.stat()?;
+
+		// SAFETY: apps is required to have at least one element.
+		if self.apps[0] == "*" {
+			shovel.cache.remove_all()?;
 		} else {
-			self.apps.iter().cloned().collect()
-		};
+			// Get a hashset of the apps.
+			let apps: HashSet<String> = self.apps.iter().cloned().collect();
 
-		// Filter out the keys to be removed.
-		let keys = shovel
-			.cache
-			.iter()?
-			.filter(|key| apps.is_empty() || apps.get(&key.name).is_some());
+			// Filter out the keys to be removed.
+			let keys = shovel
+				.cache
+				.iter()?
+				.filter(|key| apps.is_empty() || apps.get(&key.name).is_some());
 
-		let mut count = 0usize;
-		let mut size = bytesize::ByteSize(0);
-
-		for key in keys {
-			let len = fs::metadata(shovel.cache.path(&key))?.len();
-
-			shovel.cache.remove(&key.name)?;
-
-			count += 1;
-			size += len;
+			for key in keys {
+				shovel.cache.remove(&key.name)?;
+			}
 		}
+
+		let new_stat = shovel.cache.stat()?;
+
+		let count = old_stat.count - new_stat.count;
+		let length = bytesize::ByteSize(old_stat.length - new_stat.length);
 
 		println!(
 			"{}",
@@ -49,7 +47,7 @@ impl Run for RemoveCommand {
 				"Deleted: {} {}, {}",
 				count,
 				if count == 1 { "file" } else { "files" },
-				size.to_string_as(true)
+				length.to_string_as(true)
 			)
 			.bright_yellow()
 		);

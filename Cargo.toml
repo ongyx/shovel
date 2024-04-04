@@ -7,11 +7,12 @@ description = "A package manager for Windows, based off of Scoop."
 
 [dependencies]
 chrono = "0.4.35" 
+futures-util = "0.3.30"
 git2 = "0.18.2"
 home = "0.5.9"
 phf = { version = "0.11.2", features = ["macros"] }
 regex = "1.10.3"
-reqwest = "0.12.2"
+reqwest = { version = "0.12.2", features = ["stream"] }
 serde = { version = "1.0.197", features = ["derive"] }
 serde_json = "1.0.114"
 serde_path_to_error = "0.1.16"
