@@ -1,18 +1,19 @@
 use std::fs;
-use std::sync;
+use std::sync::OnceLock;
 
 use clap;
+use eyre;
 use eyre::WrapErr;
-use eyre::{self};
 use jsonschema;
 use owo_colors::OwoColorize;
 use shovel;
+use shovel::json;
 
 use crate::run::Run;
 
 static SCHEMA_JSON: &'static str =
 	include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/schema.json"));
-static SCHEMA: sync::OnceLock<jsonschema::JSONSchema> = sync::OnceLock::new();
+static SCHEMA: OnceLock<jsonschema::JSONSchema> = OnceLock::new();
 
 /// Returns the JSON schema for verifying manfiests.
 pub fn schema() -> &'static jsonschema::JSONSchema {
@@ -57,7 +58,7 @@ impl VerifyCommand {
 		let file = fs::File::open(&path)
 			.wrap_err_with(|| format!("Failed to open manifest at {}", path.display()))?;
 
-		let value = shovel::json::from_reader(file)?;
+		let value = json::from_reader(file)?;
 		let valid = schema().validate(&value);
 
 		let verified = valid.map_or_else(

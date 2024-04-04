@@ -12,6 +12,7 @@ use color_eyre;
 use eyre;
 use eyre::WrapErr;
 use shovel;
+use shovel::json;
 
 use run::Run;
 
@@ -37,7 +38,7 @@ fn main() -> eyre::Result<()> {
 			let config_file = fs::File::open(&config_path)?;
 
 			// Read the config file.
-			shovel::json::from_reader(config_file)
+			json::from_reader(config_file)
 				.wrap_err_with(|| format!("Failed to parse config file {}", config_path))?
 		}
 		None => Default::default(),
