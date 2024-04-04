@@ -1,5 +1,6 @@
 use std::collections::HashSet;
-use std::{fs, io};
+use std::fs;
+use std::io;
 
 use bytesize;
 use clap;
@@ -15,59 +16,59 @@ use crate::util;
 #[derive(tabled::Tabled, Debug)]
 #[tabled(rename_all = "pascal")]
 pub struct ShowInfo {
-    name: String,
-    version: String,
-    length: u64,
-    #[tabled(rename = "URL")]
-    url: String,
+	name: String,
+	version: String,
+	length: u64,
+	#[tabled(rename = "URL")]
+	url: String,
 }
 
 impl ShowInfo {
-    fn new(shovel: &mut shovel::Shovel, key: cache::Key) -> io::Result<Self> {
-        let path = shovel.cache.path(&key);
-        let metadata = fs::metadata(path)?;
+	fn new(shovel: &mut shovel::Shovel, key: cache::Key) -> io::Result<Self> {
+		let path = shovel.cache.path(&key);
+		let metadata = fs::metadata(path)?;
 
-        Ok(Self {
-            name: key.name,
-            version: key.version,
-            length: metadata.len(),
-            url: key.url,
-        })
-    }
+		Ok(Self {
+			name: key.name,
+			version: key.version,
+			length: metadata.len(),
+			url: key.url,
+		})
+	}
 }
 
 #[derive(clap::Args)]
 pub struct ShowCommand {
-    /// The apps to show.
-    apps: Vec<String>,
+	/// The apps to show.
+	apps: Vec<String>,
 }
 
 impl Run for ShowCommand {
-    fn run(&self, shovel: &mut shovel::Shovel) -> eyre::Result<()> {
-        let apps: HashSet<String> = self.apps.iter().cloned().collect();
+	fn run(&self, shovel: &mut shovel::Shovel) -> eyre::Result<()> {
+		let apps: HashSet<String> = self.apps.iter().cloned().collect();
 
-        let keys: Vec<_> = shovel
-            .cache
-            .iter()?
-            // Filter apps not in the list.
-            .filter(|key| apps.is_empty() || apps.get(&key.name).is_some())
-            // Ignore cache infos with errors.
-            .filter_map(|key| ShowInfo::new(shovel, key).ok())
-            .collect();
+		let keys: Vec<_> = shovel
+			.cache
+			.iter()?
+			// Filter apps not in the list.
+			.filter(|key| apps.is_empty() || apps.get(&key.name).is_some())
+			// Ignore cache infos with errors.
+			.filter_map(|key| ShowInfo::new(shovel, key).ok())
+			.collect();
 
-        let count = keys.len();
-        let size = bytesize::ByteSize(keys.iter().map(|info| info.length).sum());
-        let table = util::tableify(keys, false);
+		let count = keys.len();
+		let size = bytesize::ByteSize(keys.iter().map(|info| info.length).sum());
+		let table = util::tableify(keys, false);
 
-        let title = format!(
-            "Total: {} {}, {}",
-            count,
-            if count > 1 { "files" } else { "file" },
-            size.to_string_as(true),
-        );
+		let title = format!(
+			"Total: {} {}, {}",
+			count,
+			if count > 1 { "files" } else { "file" },
+			size.to_string_as(true),
+		);
 
-        println!("\n{}\n{}\n", title.bright_yellow(), table);
+		println!("\n{}\n{}\n", title.bright_yellow(), table);
 
-        Ok(())
-    }
+		Ok(())
+	}
 }

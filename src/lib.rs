@@ -19,11 +19,14 @@ pub mod timestamp;
 mod test;
 mod util;
 
-pub use app::{App, Apps};
-pub use bucket::{Bucket, Buckets};
+pub use app::App;
+pub use app::Apps;
+pub use bucket::Bucket;
+pub use bucket::Buckets;
 pub use cache::Cache;
 pub use config::Config;
-pub use error::{Error, Result};
+pub use error::Error;
+pub use error::Result;
 pub use manifest::Manifest;
 pub use shovel::Shovel;
 pub use timestamp::Timestamp;

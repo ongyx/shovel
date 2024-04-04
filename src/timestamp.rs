@@ -8,19 +8,19 @@ use git2;
 pub struct Timestamp(pub i64);
 
 impl fmt::Display for Timestamp {
-    /// Display the UNIX timestamp in human-readable local time.
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let timestamp = chrono::DateTime::from_timestamp(self.0, 0)
-            .unwrap()
-            .with_timezone(&chrono::Local)
-            .format("%d/%m/%Y %H:%M:%S %P");
+	/// Display the UNIX timestamp in human-readable local time.
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		let timestamp = chrono::DateTime::from_timestamp(self.0, 0)
+			.unwrap()
+			.with_timezone(&chrono::Local)
+			.format("%d/%m/%Y %H:%M:%S %P");
 
-        write!(f, "{}", timestamp)
-    }
+		write!(f, "{}", timestamp)
+	}
 }
 
 impl From<git2::Time> for Timestamp {
-    fn from(time: git2::Time) -> Self {
-        Self(time.seconds())
-    }
+	fn from(time: git2::Time) -> Self {
+		Self(time.seconds())
+	}
 }

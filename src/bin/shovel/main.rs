@@ -19,32 +19,32 @@ use run::Run;
 #[command(version, about)]
 #[command(propagate_version = true)]
 struct Args {
-    #[command(subcommand)]
-    commands: commands::Commands,
+	#[command(subcommand)]
+	commands: commands::Commands,
 
-    /// Specify a configuration file
-    #[arg(short, long, global = true)]
-    config: Option<String>,
+	/// Specify a configuration file
+	#[arg(short, long, global = true)]
+	config: Option<String>,
 }
 
 fn main() -> eyre::Result<()> {
-    color_eyre::install()?;
+	color_eyre::install()?;
 
-    let args = Args::parse();
+	let args = Args::parse();
 
-    let config: shovel::Config = match args.config {
-        Some(config_path) => {
-            let config_file = fs::File::open(&config_path)?;
+	let config: shovel::Config = match args.config {
+		Some(config_path) => {
+			let config_file = fs::File::open(&config_path)?;
 
-            // Read the config file.
-            shovel::json::from_reader(config_file)
-                .wrap_err_with(|| format!("Failed to parse config file {}", config_path))?
-        }
-        None => Default::default(),
-    };
+			// Read the config file.
+			shovel::json::from_reader(config_file)
+				.wrap_err_with(|| format!("Failed to parse config file {}", config_path))?
+		}
+		None => Default::default(),
+	};
 
-    let mut shovel = shovel::Shovel::new(config)?;
+	let mut shovel = shovel::Shovel::new(config)?;
 
-    // Delegate to sub-commands.
-    args.commands.run(&mut shovel)
+	// Delegate to sub-commands.
+	args.commands.run(&mut shovel)
 }

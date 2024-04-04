@@ -7,21 +7,21 @@ use crate::json;
 /// A catch-all error.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    // An app error.
-    #[error(transparent)]
-    App(#[from] app::Error),
+	// An app error.
+	#[error(transparent)]
+	App(#[from] app::Error),
 
-    // A bucket error.
-    #[error(transparent)]
-    Bucket(#[from] bucket::Error),
+	// A bucket error.
+	#[error(transparent)]
+	Bucket(#[from] bucket::Error),
 
-    // An IO error.
-    #[error(transparent)]
-    Io(#[from] io::Error),
+	// An IO error.
+	#[error(transparent)]
+	Io(#[from] io::Error),
 
-    // A JSON error.
-    #[error(transparent)]
-    Json(#[from] json::Error),
+	// A JSON error.
+	#[error(transparent)]
+	Json(#[from] json::Error),
 }
 
 /// A catch-all result.

@@ -1,0 +1,5 @@
+edition = "2021"
+hard_tabs = true
+
+unstable_features = true
+imports_granularity = "Item"
