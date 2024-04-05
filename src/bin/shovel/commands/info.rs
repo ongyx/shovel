@@ -92,6 +92,7 @@ impl Info {
 
 #[derive(clap::Args)]
 pub struct InfoCommand {
+	/// The app to show info for
 	pub app: String,
 }
 

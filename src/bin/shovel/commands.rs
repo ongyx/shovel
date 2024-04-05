@@ -3,6 +3,7 @@ mod cache;
 mod cat;
 mod info;
 mod list;
+mod neco;
 mod search;
 mod update;
 
@@ -30,6 +31,9 @@ pub enum Commands {
 	/// List installed apps
 	List(list::ListCommand),
 
+	#[command(hide = true)]
+	Neco(neco::NecoCommand),
+
 	/// Search for an app
 	Search(search::SearchCommand),
 
@@ -45,6 +49,7 @@ impl Run for Commands {
 			Self::Cat(cmd) => cmd.run(shovel),
 			Self::Info(cmd) => cmd.run(shovel),
 			Self::List(cmd) => cmd.run(shovel),
+			Self::Neco(cmd) => cmd.run(shovel),
 			Self::Search(cmd) => cmd.run(shovel),
 			Self::Update(cmd) => cmd.run(shovel),
 		}
