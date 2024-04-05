@@ -1,9 +1,11 @@
 use std::collections::HashMap;
 use std::fmt;
+use std::sync::OnceLock;
 
-use serde;
-use serde::de;
-use serde_with;
+use serde::de::DeserializeOwned;
+use serde::Serialize;
+use serde_with::OneOrMany;
+use windows_version;
 
 use crate::json::json_enum;
 use crate::json::json_enum_key;
@@ -11,21 +13,19 @@ use crate::json::json_struct;
 
 macro_rules! getter {
     ($arch_type:ty { $($name:ident: $type:ty),* $(,)? }) => {
-        /// Returns the values for the current architecture.
-        pub fn arch(&self) -> Option<&$arch_type> {
-            self.architecture
-                .as_ref()
-                .and_then(|arch| arch.get(&Arch::current()))
-        }
-
         $(
             /// Returns the architecture-specific or common value for the field in that order.
+			#[inline]
             pub fn $name(&self) -> Option<&$type> {
-                if let Some(arch) = self.arch() {
-                    if let Some(value) = arch.$name.as_ref() {
-                        return Some(value)
-                    }
-                }
+				let arches = self.architecture.as_ref()?;
+
+				for arch in Arch::compatible() {
+	                if let Some(arch) = arches.get(arch) {
+	                    if let Some(value) = arch.$name.as_ref() {
+	                        return Some(value)
+	                    }
+	                }
+				}
 
                 // Return the top-level field.
                 return self.common.$name.as_ref();
@@ -38,8 +38,8 @@ json_struct! {
 	/// A list represented as a single element by itself or multiple elements.
 	#[serde(transparent)]
 	pub struct List<T>
-	where T: serde::Serialize + de::DeserializeOwned {
-		#[serde_as(as = "serde_with::OneOrMany<_>")]
+	where T: Serialize + DeserializeOwned {
+		#[serde_as(as = "OneOrMany<_>")]
 		pub items: Vec<T>,
 	}
 }
@@ -439,12 +439,12 @@ json_enum_key! {
 }
 
 impl Arch {
-	/// Returns the current architecture.
+	/// Returns the target architecture at the time of compilation.
 	///
 	/// # Panics
 	///
 	/// This function panics if the target architecture is not one of (`x86`, `x86_64`, `aarch64`).
-	pub fn current() -> Self {
+	pub fn native() -> Self {
 		if cfg!(target_arch = "x86") {
 			Self::X86
 		} else if cfg!(target_arch = "x86_64") {
@@ -455,11 +455,53 @@ impl Arch {
 			panic!("Unsupported architecture")
 		}
 	}
+
+	/// Returns the architecture(s) compatible with the native architecture.
+	/// The order is guaranteed to be `[native, compatible...]`.
+	///
+	/// An architecture is considered compatible when apps built for that architecture can run on the native architecture unmodified.
+	///
+	/// # Arch-specific behaviour
+	///
+	/// On `aarch64` machines, support for `x86` and `x86_64` apps depends on the version of Windows:
+	/// * Windows 10 (build < 22000) supports `x86` apps.
+	/// * Windows 11 (build >= 22000) supports `x86` and `x86_64` apps.
+	///
+	/// See https://learn.microsoft.com/en-us/windows/arm/overview for details.
+	///
+	/// # Panics
+	///
+	/// The same caveats apply to this function as `Self::native`.
+	pub fn compatible() -> &'static [Self] {
+		static COMPATIBLE: OnceLock<Vec<Arch>> = OnceLock::new();
+
+		COMPATIBLE.get_or_init(|| {
+			// The native arch always comes first.
+			let mut compatible = vec![Self::native()];
+
+			if cfg!(target_arch = "aarch64") {
+				let version = windows_version::OsVersion::current();
+
+				// Check if the build is Windows 11.
+				// https://en.wikipedia.org/wiki/Windows_11_version_history
+				if version.build >= 22000 {
+					compatible.push(Self::X86_64);
+				}
+			}
+
+			if cfg!(any(target_arch = "x86_64", target_arch = "aarch64")) {
+				// Windows 10/11 on x86_64 or arm64 always supports x86 apps.
+				compatible.push(Self::X86);
+			}
+
+			compatible
+		})
+	}
 }
 
 impl Default for Arch {
 	fn default() -> Self {
-		Self::current()
+		Self::native()
 	}
 }
 
