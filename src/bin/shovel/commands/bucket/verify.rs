@@ -1,18 +1,13 @@
 use std::fs;
 use std::sync::OnceLock;
 
-use clap;
-use eyre;
 use eyre::WrapErr;
-use jsonschema;
 use owo_colors::OwoColorize;
-use shovel;
 use shovel::json;
 
 use crate::run::Run;
 
-static SCHEMA_JSON: &'static str =
-	include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/schema.json"));
+static SCHEMA_JSON: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/schema.json"));
 static SCHEMA: OnceLock<jsonschema::JSONSchema> = OnceLock::new();
 
 /// Returns the JSON schema for verifying manfiests.
@@ -54,7 +49,7 @@ impl VerifyCommand {
 	fn validate(&self, name: &str, bucket: &shovel::Bucket) -> eyre::Result<Verified> {
 		use Verified::*;
 
-		let path = bucket.manifest_path(&name);
+		let path = bucket.manifest_path(name);
 		let file = fs::File::open(&path)
 			.wrap_err_with(|| format!("Failed to open manifest at {}", path.display()))?;
 
@@ -110,7 +105,7 @@ impl Run for VerifyCommand {
 		use Verified::*;
 
 		let buckets = match &self.bucket {
-			Some(name) => vec![shovel.buckets.open(&name)],
+			Some(name) => vec![shovel.buckets.open(name)],
 			None => shovel.buckets.iter()?.collect(),
 		};
 

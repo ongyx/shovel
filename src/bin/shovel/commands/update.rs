@@ -1,8 +1,5 @@
-use clap;
 use eyre::WrapErr;
 use rayon::prelude::*;
-use shovel;
-use tabled;
 
 use crate::multi_progress;
 use crate::run::Run;

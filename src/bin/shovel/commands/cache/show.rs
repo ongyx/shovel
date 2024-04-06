@@ -2,13 +2,8 @@ use std::collections::HashSet;
 use std::fs;
 use std::io;
 
-use bytesize;
-use clap;
-use eyre;
 use owo_colors::OwoColorize;
-use shovel;
 use shovel::cache;
-use tabled;
 
 use crate::run::Run;
 use crate::util;

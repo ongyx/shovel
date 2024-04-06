@@ -1,8 +1,6 @@
 mod remove;
 mod show;
 
-use clap;
-
 use crate::run::Run;
 
 #[derive(clap::Args)]

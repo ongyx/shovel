@@ -6,12 +6,8 @@ mod util;
 
 use std::fs;
 
-use clap;
 use clap::Parser;
-use color_eyre;
-use eyre;
 use eyre::WrapErr;
-use shovel;
 use shovel::json;
 
 use run::Run;

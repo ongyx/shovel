@@ -1,9 +1,6 @@
 use std::fs;
 use std::path::PathBuf;
 
-use clap;
-use eyre;
-use shovel;
 use shovel::app;
 
 use crate::run::Run;

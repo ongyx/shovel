@@ -1,7 +1,6 @@
 use std::ffi;
 use std::fs;
 use std::io;
-use std::iter;
 use std::path::Path;
 use std::path::PathBuf;
 use std::time;
@@ -19,14 +18,22 @@ pub fn osstr_to_string(osstr: &ffi::OsStr) -> String {
 
 /// An iterator over directories in a path. Created by the `subdirs` function.
 pub struct Dirs {
-	inner: iter::FilterMap<fs::ReadDir, fn(io::Result<fs::DirEntry>) -> Option<PathBuf>>,
+	read_dir: fs::ReadDir,
 }
 
 impl Iterator for Dirs {
 	type Item = PathBuf;
 
 	fn next(&mut self) -> Option<Self::Item> {
-		self.inner.next()
+		self.read_dir.find_map(|res| {
+			let path = res.ok()?.path();
+
+			if path.is_dir() {
+				Some(path)
+			} else {
+				None
+			}
+		})
 	}
 }
 
@@ -39,18 +46,8 @@ pub fn dirs<P>(path: P) -> io::Result<Dirs>
 where
 	P: AsRef<Path>,
 {
-	fn entry_to_path(result: io::Result<fs::DirEntry>) -> Option<PathBuf> {
-		let path = result.ok()?.path();
-
-		if path.is_dir() {
-			Some(path)
-		} else {
-			None
-		}
-	}
-
 	Ok(Dirs {
-		inner: fs::read_dir(path)?.filter_map(entry_to_path),
+		read_dir: fs::read_dir(path)?,
 	})
 }
 

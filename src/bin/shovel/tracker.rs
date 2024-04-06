@@ -20,7 +20,7 @@ impl Tracker {
 	}
 
 	/// Returns a set of remote callbacks that send updates when invoked.
-	pub fn remote_callbacks<'rc>(&'rc self) -> RemoteCallbacks<'rc> {
+	pub fn remote_callbacks(&self) -> RemoteCallbacks<'_> {
 		let mut callbacks = RemoteCallbacks::new();
 
 		let mut receive_id = None;
@@ -72,7 +72,7 @@ impl Tracker {
 	}
 
 	/// Returns a set of fetch options that wraps `Self::remote_callbacks`.
-	pub fn fetch_options<'fo>(&'fo self) -> FetchOptions<'fo> {
+	pub fn fetch_options(&self) -> FetchOptions<'_> {
 		let mut fetch = FetchOptions::new();
 
 		fetch.remote_callbacks(self.remote_callbacks());
@@ -81,7 +81,7 @@ impl Tracker {
 	}
 
 	/// Returns a checkout builder with a callback that sends updates when invoked.
-	pub fn checkout_builder<'cb>(&'cb self) -> CheckoutBuilder<'cb> {
+	pub fn checkout_builder(&self) -> CheckoutBuilder<'_> {
 		let mut checkout = CheckoutBuilder::new();
 
 		let mut id = None;
@@ -103,7 +103,7 @@ impl Tracker {
 	}
 
 	/// Returns a repository builder with both remote and checkout callbacks.
-	pub fn repo_builder<'rb>(&'rb self) -> RepoBuilder<'rb> {
+	pub fn repo_builder(&self) -> RepoBuilder<'_> {
 		let mut builder = RepoBuilder::new();
 		builder
 			.fetch_options(self.fetch_options())

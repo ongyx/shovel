@@ -1,11 +1,7 @@
-use std::sync::Arc;
+use std::rc::Rc;
 
-use clap;
-use eyre;
 use eyre::WrapErr;
-use shovel;
 use shovel::bucket;
-use tabled;
 
 use crate::run::Run;
 use crate::util;
@@ -20,7 +16,7 @@ struct SearchInfo {
 }
 
 impl SearchInfo {
-	fn new(bucket: Arc<bucket::Bucket>, item: bucket::SearchItem) -> shovel::Result<Self> {
+	fn new(bucket: Rc<bucket::Bucket>, item: bucket::SearchItem) -> shovel::Result<Self> {
 		let manifest = item.manifest?;
 
 		let version = manifest.version.clone();

@@ -67,7 +67,7 @@ impl TryFrom<String> for Key {
 	type Error = InvalidKey;
 
 	fn try_from(value: String) -> std::result::Result<Self, Self::Error> {
-		let parts: Vec<_> = value.split("#").collect();
+		let parts: Vec<_> = value.split('#').collect();
 		if parts.len() != 3 {
 			return Err(InvalidKey);
 		}
@@ -237,7 +237,7 @@ impl Cache {
 			// SAFETY: Entries should never end in '..'.
 			let name = path.file_name().unwrap().to_str().unwrap();
 
-			if name.split("#").next() == Some(app) {
+			if name.split('#').next() == Some(app) {
 				fs::remove_file(&path)?;
 			}
 		}

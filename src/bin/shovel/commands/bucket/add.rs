@@ -1,10 +1,7 @@
 use std::thread;
 
-use clap;
-use eyre;
 use eyre::WrapErr;
 use owo_colors::OwoColorize;
-use shovel;
 
 use crate::commands::bucket::known;
 use crate::multi_progress;

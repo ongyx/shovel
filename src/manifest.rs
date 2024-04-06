@@ -195,25 +195,21 @@ json_struct! {
 impl fmt::Display for Shortcut {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		let exe = self.executable.as_str();
-		// Despite the name, this is a String and not a Vec.
-		let args = self
-			.arguments
-			.as_ref()
-			.map(|arg| arg.as_str())
-			.unwrap_or_default();
-
-		let cmd = vec![exe, args];
 
 		write!(
 			f,
 			"{} ({}) => {}",
 			self.name,
-			self.icon
-				.as_ref()
-				.map(|icon| icon.as_str())
-				.unwrap_or_default(),
-			cmd.join(" "),
-		)
+			self.icon.as_deref().unwrap_or_default(),
+			exe,
+		)?;
+
+		// Despite the name, this is a String and not a Vec.
+		if let Some(args) = self.arguments.as_deref() {
+			write!(f, " {}", args)?;
+		}
+
+		Ok(())
 	}
 }
 

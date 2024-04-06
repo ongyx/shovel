@@ -1,9 +1,6 @@
 use std::iter;
 
-use clap;
-use shovel;
 use shovel::app;
-use tabled;
 
 use crate::run::Run;
 use crate::util;

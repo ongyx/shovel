@@ -162,16 +162,13 @@ impl Iterator for Iter {
 		dir.push("current");
 
 		// The 'current' directory may not exist if the app is corrupted.
-		let app = dir
-			.try_exists()
-			.map_err(|err| Error::from(err))
-			.and_then(|exists| {
-				if exists {
-					Ok(App::open(dir))
-				} else {
-					Err(Error::NotFound)
-				}
-			});
+		let app = dir.try_exists().map_err(Error::from).and_then(|exists| {
+			if exists {
+				Ok(App::open(dir))
+			} else {
+				Err(Error::NotFound)
+			}
+		});
 
 		Some((name, app))
 	}

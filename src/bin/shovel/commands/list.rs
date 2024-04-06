@@ -1,8 +1,5 @@
-use clap;
 use eyre::WrapErr;
-use shovel;
 use shovel::app;
-use tabled;
 
 use crate::run::Run;
 use crate::util;

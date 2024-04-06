@@ -7,10 +7,6 @@ mod neco;
 mod search;
 mod update;
 
-use clap;
-use eyre;
-use shovel;
-
 use crate::run::Run;
 
 #[derive(clap::Subcommand)]

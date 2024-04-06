@@ -1,8 +1,5 @@
-use clap;
-use eyre;
 use eyre::WrapErr;
 use owo_colors::OwoColorize;
-use shovel;
 
 use crate::run::Run;
 

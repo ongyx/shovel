@@ -1,9 +1,7 @@
-use tabled;
 use tabled::settings;
 use tabled::settings::object;
 use tabled::settings::peaker;
 use tabled::settings::themes;
-use terminal_size;
 
 /// Returns a formatted table for an iterator over tabular items.
 pub fn tableify<I, T>(iter: I, transpose: bool) -> tabled::Table

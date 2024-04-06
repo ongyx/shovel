@@ -1,13 +1,13 @@
 use std::fs;
 use std::io;
+use std::iter;
 use std::iter::Flatten;
 use std::iter::Repeat;
 use std::iter::Zip;
-use std::iter::{self};
 use std::path::Path;
 use std::path::PathBuf;
-use std::sync::Arc;
-use std::vec;
+use std::rc::Rc;
+use std::vec::IntoIter;
 
 use git2;
 use git2::build;
@@ -153,7 +153,7 @@ impl Bucket {
 	/// # Arguments
 	///
 	/// * `since` - The commit ID to yield until.
-	pub fn commits<'c>(&'c self, since: git2::Oid) -> Result<Commits<'c>> {
+	pub fn commits(&self, since: git2::Oid) -> Result<Commits<'_>> {
 		Commits::new(&self.repo, since)
 	}
 
@@ -173,7 +173,7 @@ impl Bucket {
 
 	/// Parses and yields each manifest in the bucket as (name, manifest).
 	/// This is a convenience function over `Self::search`.
-	pub fn manifests(&self) -> Result<Search<fn(&str) -> bool>> {
+	pub fn manifests(&self) -> Result<Manifests> {
 		self.search(|_| true)
 	}
 
@@ -194,7 +194,7 @@ impl Bucket {
 	pub fn manifest(&self, name: &str) -> Result<Manifest> {
 		let path = self.manifest_path(name);
 
-		manifest_from_file(&path)
+		manifest_from_file(path)
 	}
 
 	/// Returns the last commit made to a manifest.
@@ -409,6 +409,7 @@ pub struct SearchItem {
 	pub manifest: Result<Manifest>,
 }
 
+/// An iterator over manifests in a bucket, filtered by a predicate of type `P`.
 pub struct Search<P>
 where
 	P: Fn(&str) -> bool,
@@ -464,11 +465,17 @@ where
 	}
 }
 
+/// An iterator over all manifests in a bucket.
+pub type Manifests = Search<fn(&str) -> bool>;
+
+type SearchAllInner<P> = Zip<Repeat<Rc<Bucket>>, Search<P>>;
+
+/// An iterator over manifests in all buckets, filtered by a predicate of type `P`.
 pub struct SearchAll<P>
 where
 	P: Fn(&str) -> bool + Copy,
 {
-	inner: Flatten<vec::IntoIter<Zip<Repeat<Arc<Bucket>>, Search<P>>>>,
+	inner: Flatten<IntoIter<SearchAllInner<P>>>,
 }
 
 impl<P> SearchAll<P>
@@ -480,10 +487,10 @@ where
 		I: Iterator<Item = Bucket>,
 	{
 		let manifests: Result<Vec<_>> = buckets
-			// Since each item has a handle to the bucket, the handle is wrapped in an Arc to avoid duplication.
+			// Since each item has a handle to the bucket, the handle is wrapped in an Rc to avoid duplication.
 			.map(move |bucket| {
-				// Since each item has a handle to the bucket, the handle is wrapped in an Arc to avoid duplication.
-				let bucket = Arc::new(bucket);
+				// Since each item has a handle to the bucket, the handle is wrapped in an Rc to avoid duplication.
+				let bucket = Rc::new(bucket);
 				let manifests = bucket.search(predicate)?;
 
 				// Zip the bucket and its manifests together.
@@ -501,12 +508,15 @@ impl<P> Iterator for SearchAll<P>
 where
 	P: Fn(&str) -> bool + Copy,
 {
-	type Item = (Arc<Bucket>, SearchItem);
+	type Item = (Rc<Bucket>, SearchItem);
 
 	fn next(&mut self) -> Option<Self::Item> {
 		self.inner.next()
 	}
 }
+
+/// An iterator over all manifests in all buckets.
+pub type AllManifests = SearchAll<fn(&str) -> bool>;
 
 /// A bucket manager.
 ///
@@ -633,7 +643,7 @@ impl Buckets {
 
 	/// Parses and yields each manifest in all buckets.
 	/// This is a convenience function over `Self::search`.
-	pub fn manifests(&self) -> Result<SearchAll<fn(&str) -> bool>> {
+	pub fn manifests(&self) -> Result<AllManifests> {
 		self.search_all(|_| true, |_| true)
 	}
 
@@ -642,7 +652,7 @@ impl Buckets {
 	/// # Arguments
 	///
 	/// * `name`- The name of the manifest.
-	pub fn manifest(&self, name: &str) -> Result<(Arc<Bucket>, SearchItem)> {
+	pub fn manifest(&self, name: &str) -> Result<(Rc<Bucket>, SearchItem)> {
 		let mut search = self.search_all(|_| true, |manifest_name| manifest_name == name)?;
 
 		search.next().ok_or(Error::ManifestNotFound)

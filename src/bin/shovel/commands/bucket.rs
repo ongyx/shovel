@@ -4,10 +4,6 @@ mod list;
 mod remove;
 mod verify;
 
-use clap;
-use eyre;
-use shovel;
-
 use crate::run::Run;
 
 #[derive(clap::Subcommand)]
