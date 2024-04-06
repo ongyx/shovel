@@ -43,6 +43,11 @@ impl Config {
 	pub fn cache_dir(&self) -> PathBuf {
 		self.install_dir().join("cache")
 	}
+
+	/// Returns the directory where user data is persisted.
+	pub fn persist_dir(&self) -> PathBuf {
+		self.install_dir().join("persist")
+	}
 }
 
 impl Default for Config {

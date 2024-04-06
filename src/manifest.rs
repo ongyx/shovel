@@ -501,6 +501,22 @@ impl Default for Arch {
 	}
 }
 
+impl fmt::Display for Arch {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		use Arch::*;
+
+		write!(
+			f,
+			"{}",
+			match self {
+				X86 => "x86",
+				X86_64 => "x86_64",
+				Arm64 => "aarch64",
+			}
+		)
+	}
+}
+
 json_struct! {
 	/// A subset of an app's manifest that can be customized per architecture in an autoupdate template.
 	pub struct AutoupdateArch {

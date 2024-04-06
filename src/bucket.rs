@@ -334,7 +334,7 @@ impl Bucket {
 	}
 }
 
-/// An iterator over buckets. Created by the `iter` method on `Buckets`.
+/// An iterator over buckets. Created by `Buckets::iter`.
 pub struct Iter {
 	dirs: util::Dirs,
 }
@@ -360,7 +360,7 @@ impl Iterator for Iter {
 	}
 }
 
-/// An iterator over commits since a specific commit. Created by the `commits` method on `Buckets`.
+/// An iterator over commits since a specific commit. Created by `Buckets::commits`.
 pub struct Commits<'c> {
 	repo: &'c git2::Repository,
 	revwalk: git2::Revwalk<'c>,
@@ -409,7 +409,7 @@ pub struct SearchItem {
 	pub manifest: Result<Manifest>,
 }
 
-/// An iterator over manifests in a bucket, filtered by a predicate of type `P`.
+/// An iterator over manifests in a bucket, filtered by a predicate of type `P`. Created by `Buckets::search`.
 pub struct Search<P>
 where
 	P: Fn(&str) -> bool,
@@ -470,7 +470,7 @@ pub type Manifests = Search<fn(&str) -> bool>;
 
 type SearchAllInner<P> = Zip<Repeat<Rc<Bucket>>, Search<P>>;
 
-/// An iterator over manifests in all buckets, filtered by a predicate of type `P`.
+/// An iterator over manifests in all buckets, filtered by a predicate of type `P`. Created by `Buckets::search_all`.
 pub struct SearchAll<P>
 where
 	P: Fn(&str) -> bool + Copy,
