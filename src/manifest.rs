@@ -12,12 +12,12 @@ use crate::json::json_enum_key;
 use crate::json::json_struct;
 
 macro_rules! getter {
-    ($arch_type:ty { $($name:ident: $type:ty),* $(,)? }) => {
+    ($inner:ident { $($name:ident: $type:ty),* $(,)? }) => {
         $(
             /// Returns the architecture-specific or common value for the field in that order.
 			#[inline]
             pub fn $name(&self) -> Option<&$type> {
-				let arches = self.architecture.as_ref()?;
+				let arches = self.$inner.as_ref()?;
 
 				for arch in Arch::compatible() {
 	                if let Some(arch) = arches.get(arch) {
@@ -34,6 +34,29 @@ macro_rules! getter {
     };
 }
 
+macro_rules! list_getter {
+    ($inner:ident { $($name:ident: $type:ty),* $(,)? }) => {
+        $(
+            /// Returns the architecture-specific or common list as a slice for the field in that order.
+			#[inline]
+            pub fn $name(&self) -> Option<&[$type]> {
+				let arches = self.$inner.as_ref()?;
+
+				for arch in Arch::compatible() {
+	                if let Some(arch) = arches.get(arch) {
+	                    if let Some(list) = arch.$name.as_ref() {
+	                        return Some(list.as_ref())
+	                    }
+	                }
+				}
+
+                // Return the top-level field.
+                return self.common.$name.as_ref().map(|list| list.as_ref());
+            }
+        )*
+    };
+}
+
 json_struct! {
 	/// A list represented as a single element by itself or multiple elements.
 	#[serde(transparent)]
@@ -41,6 +64,15 @@ json_struct! {
 	where T: Serialize + DeserializeOwned {
 		#[serde_as(as = "OneOrMany<_>")]
 		pub items: Vec<T>,
+	}
+}
+
+impl<T> AsRef<[T]> for List<T>
+where
+	T: Serialize + DeserializeOwned,
+{
+	fn as_ref(&self) -> &[T] {
+		&self.items
 	}
 }
 
@@ -532,6 +564,9 @@ json_struct! {
 		/// If an archive is downloaded from the URL, extract a specific directory.
 		pub extract_dir: Option<List<String>>,
 
+		/// If an archive is downloaded from the URL, extract it to the specified directory.
+		pub extract_to: Option<List<String>>,
+
 		/// A list of hash extractions for each URL.
 		pub hash: Option<List<HashExtraction>>,
 
@@ -574,15 +609,21 @@ json_struct! {
 
 impl Autoupdate {
 	getter! {
-		AutoupdateArch {
+		architecture {
 			bin: Bins,
-			env_add_path: List<String>,
 			env_set: HashMap<String, String>,
-			extract_dir: List<String>,
-			hash: List<HashExtraction>,
 			installer: Installer,
 			shortcuts: Vec<Shortcut>,
-			url: List<String>,
+		}
+	}
+
+	list_getter! {
+		architecture {
+			env_add_path: String,
+			extract_dir: String,
+			extract_to: String,
+			hash: HashExtraction,
+			url: String,
 		}
 	}
 }
@@ -604,6 +645,9 @@ json_struct! {
 
 		/// If an archive is downloaded from the URL, extract a specific directory.
 		pub extract_dir: Option<List<String>>,
+
+		/// If an archive is downloaded from the URL, extract it to the specified directory.
+		pub extract_to: Option<List<String>>,
 
 		/// A list of hashes for each URL.
 		/// SHA256, SHA512, SHA1, and MD5 are supported, defaulting to SHA256.
@@ -688,21 +732,27 @@ json_struct! {
 
 impl Manifest {
 	getter! {
-		ManifestArch {
+		architecture {
 			bin: Bins,
 			checkver: Checkver,
-			env_add_path: List<String>,
 			env_set: HashMap<String, String>,
-			extract_dir: List<String>,
-			hash: List<String>,
 			installer: Installer,
-			pre_install: List<String>,
-			post_install: List<String>,
-			pre_uninstall: List<String>,
-			post_uninstall: List<String>,
 			shortcuts: Vec<Shortcut>,
 			uninstaller: Installer,
-			url: List<String>,
+		}
+	}
+
+	list_getter! {
+		architecture {
+			env_add_path: String,
+			extract_dir: String,
+			extract_to: String,
+			hash: String,
+			pre_install: String,
+			post_install: String,
+			pre_uninstall: String,
+			post_uninstall: String,
+			url: String,
 		}
 	}
 }

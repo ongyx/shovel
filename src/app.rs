@@ -9,15 +9,18 @@ use thiserror;
 use crate::json;
 use crate::manifest::Arch;
 use crate::manifest::Manifest;
+
 use crate::timestamp::Timestamp;
 use crate::util;
+
+const CURRENT: &str = "current";
 
 /// An app error.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-	/// An app does not exist.
-	#[error("App not found")]
-	NotFound,
+	/// An app does not exist for a specific version.
+	#[error("App {name} with version {version} not found")]
+	NotFound { name: String, version: String },
 
 	/// An app's manifest does not exist.
 	#[error("Manifest not found")]
@@ -159,14 +162,17 @@ impl Iterator for Iter {
 		// otherwise it would just be `current`.
 		let name = util::osstr_to_string(dir.file_name().unwrap());
 
-		dir.push("current");
+		dir.push(CURRENT);
 
 		// The 'current' directory may not exist if the app is corrupted.
 		let app = dir.try_exists().map_err(Error::from).and_then(|exists| {
 			if exists {
 				Ok(App::open(dir))
 			} else {
-				Err(Error::NotFound)
+				Err(Error::NotFound {
+					name: name.clone(),
+					version: CURRENT.to_owned(),
+				})
 			}
 		});
 
@@ -279,7 +285,10 @@ impl Apps {
 		if dir.try_exists()? {
 			Ok(App::open(dir))
 		} else {
-			Err(Error::NotFound)
+			Err(Error::NotFound {
+				name: name.to_owned(),
+				version: version.to_owned(),
+			})
 		}
 	}
 

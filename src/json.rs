@@ -41,7 +41,7 @@ macro_rules! json_enum {
 /// Macro for generating a JSON enum as a map key.
 macro_rules! json_enum_key {
 	($item:item) => {
-		#[derive(serde::Serialize, serde::Deserialize, Debug, PartialEq, Eq, Hash)]
+		#[derive(serde::Serialize, serde::Deserialize, Debug, PartialEq, Eq, Hash, Copy, Clone)]
 		$item
 	};
 }

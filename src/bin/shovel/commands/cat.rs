@@ -1,8 +1,6 @@
 use std::fs;
 use std::path::PathBuf;
 
-use shovel::app;
-
 use crate::run::Run;
 use crate::util;
 
@@ -13,7 +11,7 @@ pub struct CatCommand {
 }
 
 impl CatCommand {
-	fn path(&self, shovel: &mut shovel::Shovel) -> shovel::Result<PathBuf> {
+	fn path(&self, shovel: &mut shovel::Shovel) -> eyre::Result<PathBuf> {
 		let (bucket_name, manifest_name) = util::parse_app(&self.app);
 
 		let mut search = shovel.buckets.search_all(
@@ -21,7 +19,9 @@ impl CatCommand {
 			|manifest| manifest == manifest_name,
 		)?;
 
-		let (bucket, item) = search.next().ok_or(app::Error::NotFound)?;
+		let (bucket, item) = search
+			.next()
+			.ok_or_else(|| eyre::eyre!("Search results are empty"))?;
 
 		Ok(bucket.manifest_path(&item.name))
 	}

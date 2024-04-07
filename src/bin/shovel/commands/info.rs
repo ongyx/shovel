@@ -50,7 +50,7 @@ impl Info {
 		let installed = match app {
 			Ok(app) => Ok(app.manifest()?.version),
 			// If the app is not found, do not propagate the error.
-			Err(app::Error::NotFound) => Ok("(not installed)".to_owned()),
+			Err(app::Error::NotFound { .. }) => Ok("(not installed)".to_owned()),
 			Err(err) => Err(err),
 		}?;
 
