@@ -181,8 +181,8 @@ impl Cache {
 		})
 	}
 
-	/// Adds a key to the cache by downloading its URL.
-	/// If the URL has been cached, `true` is returned, otherwise `false`.
+	/// Adds a key to the cache by downloading its URL, returning a 2-tuple (cached, path).
+	/// cached is `true` if the URL has already been cached, otherwise `false.`
 	///
 	/// # Arguments
 	///
@@ -193,13 +193,15 @@ impl Cache {
 		client: reqwest::Client,
 		key: &Key,
 		progress: Option<P>,
-	) -> Result<bool>
+	) -> Result<(bool, PathBuf)>
 	where
-		P: Fn(u64, u64),
+		P: Fn(&Key, u64, u64),
 	{
+		let path = self.path(key);
+
 		if self.exists(key)? {
 			// The file is cached.
-			return Ok(true);
+			return Ok((true, path));
 		}
 
 		let resp = client.get(&key.url).send().await?;
@@ -219,11 +221,11 @@ impl Cache {
 			current += chunk.len() as u64;
 
 			if let Some(ref progress) = progress {
-				progress(current, total);
+				progress(key, current, total);
 			}
 		}
 
-		Ok(false)
+		Ok((false, path))
 	}
 
 	/// Removes all cached files for a specific app.

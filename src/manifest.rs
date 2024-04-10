@@ -1,11 +1,12 @@
 use std::collections::HashMap;
 use std::fmt;
+use std::ops::Deref;
+use std::ops::DerefMut;
 use std::sync::OnceLock;
 
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_with::OneOrMany;
-use windows_version;
 
 use crate::json::json_enum;
 use crate::json::json_enum_key;
@@ -44,35 +45,80 @@ macro_rules! list_getter {
 
 				for arch in Arch::compatible() {
 	                if let Some(arch) = arches.get(arch) {
-	                    if let Some(list) = arch.$name.as_ref() {
-	                        return Some(list.as_ref())
+	                    if let Some(list) = arch.$name.as_deref() {
+	                        return Some(list)
 	                    }
 	                }
 				}
 
                 // Return the top-level field.
-                return self.common.$name.as_ref().map(|list| list.as_ref());
+                return self.common.$name.as_deref();
             }
         )*
     };
 }
 
+fn re_invalid_version() -> &'static regex::Regex {
+	static RE_INVALID_VERSION: OnceLock<regex::Regex> = OnceLock::new();
+
+	RE_INVALID_VERSION.get_or_init(|| regex::Regex::new(r"[^\w\.\-\+_]").unwrap())
+}
+
+/// A manifest error related to validation.
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+	/// A manifest version is invalid.
+	#[error("Manifest version {version:?} is invalid - found character {invalid:?}")]
+	InvalidVersion { version: String, invalid: String },
+
+	/// A manifest does not have URLs.
+	#[error("No URL(s) found in manifest")]
+	UrlsNotFound,
+
+	/// A manifest's shortcut is invalid.
+	#[error(
+		"Manifest shortcut must consist of [executable, name, (parameters), (icon)] - found {0:?}"
+	)]
+	InvalidShortcut(Vec<String>),
+
+	/// A manifest's shim is invalid.
+	#[error("Manifest shim must consist of [executable, name, (args...)] -  found {0:?}")]
+	InvalidShim(Vec<String>),
+}
+
+/// A manifest result.
+pub type Result<T> = std::result::Result<T, Error>;
+
 json_struct! {
-	/// A list represented as a single element by itself or multiple elements.
+	/// A list of elements of type `T` that (de)serializes to:
+	/// * `T` by itself, if there is only one element, or
+	/// * `Vec<T>` if there is more than one element.
 	#[serde(transparent)]
 	pub struct List<T>
 	where T: Serialize + DeserializeOwned {
+		/// The items in the list.
 		#[serde_as(as = "OneOrMany<_>")]
 		pub items: Vec<T>,
 	}
 }
 
-impl<T> AsRef<[T]> for List<T>
+impl<T> Deref for List<T>
 where
 	T: Serialize + DeserializeOwned,
 {
-	fn as_ref(&self) -> &[T] {
+	type Target = [T];
+
+	fn deref(&self) -> &Self::Target {
 		&self.items
+	}
+}
+
+impl<T> DerefMut for List<T>
+where
+	T: Serialize + DeserializeOwned,
+{
+	fn deref_mut(&mut self) -> &mut Self::Target {
+		&mut self.items
 	}
 }
 
@@ -246,9 +292,9 @@ impl fmt::Display for Shortcut {
 }
 
 impl TryFrom<Vec<String>> for Shortcut {
-	type Error = &'static str;
+	type Error = Error;
 
-	fn try_from(vec: Vec<String>) -> Result<Self, Self::Error> {
+	fn try_from(vec: Vec<String>) -> Result<Self> {
 		match vec.len() {
 			2..=4 => Ok(Self {
 				executable: vec[0].clone(),
@@ -256,7 +302,7 @@ impl TryFrom<Vec<String>> for Shortcut {
 				arguments: vec.get(2).cloned(),
 				icon: vec.get(3).cloned(),
 			}),
-			_ => Err("Shortcut must consist of [executable, name, (parameters), (icon)]"),
+			_ => Err(Error::InvalidShortcut(vec)),
 		}
 	}
 }
@@ -282,7 +328,7 @@ impl From<Shortcut> for Vec<String> {
 json_struct! {
 	/// An aliased shim for an executable.
 	///
-	/// The vec must have 2 or more elements:
+	/// This is represented as a JSON array of `[executable, name, (args...)]`.
 	#[derive(Clone)]
 	#[serde(try_from = "Vec<String>")]
 	#[serde(into = "Vec<String>")]
@@ -297,9 +343,9 @@ json_struct! {
 }
 
 impl TryFrom<Vec<String>> for Shim {
-	type Error = &'static str;
+	type Error = Error;
 
-	fn try_from(vec: Vec<String>) -> Result<Self, Self::Error> {
+	fn try_from(vec: Vec<String>) -> Result<Self> {
 		if vec.len() >= 2 {
 			Ok(Self {
 				executable: vec[0].clone(),
@@ -307,7 +353,7 @@ impl TryFrom<Vec<String>> for Shim {
 				arguments: vec[2..].to_vec(),
 			})
 		} else {
-			Err("Shim must consist of [executable, alias, (args...)]")
+			Err(Error::InvalidShim(vec))
 		}
 	}
 }
@@ -579,6 +625,8 @@ json_struct! {
 		/// A list of template URLs to download.
 		/// If a URL contains a fragment starting with '/', the download is renamed,
 		/// i.e., https://example.test/app.exe#/app.zip -> app.zip
+		///
+		/// The last URL is used as the installer.
 		pub url: Option<List<String>>,
 	}
 }
@@ -678,6 +726,8 @@ json_struct! {
 		/// A list of URLs to download.
 		/// If a URL contains a fragment starting with '/', the download is renamed,
 		/// i.e., https://example.test/app.exe#/app.zip -> app.zip
+		///
+		/// The last URL is used as the installer.
 		pub url: Option<List<String>>,
 	}
 }
@@ -754,6 +804,33 @@ impl Manifest {
 			post_uninstall: String,
 			url: String,
 		}
+	}
+
+	/// Checks if the manifest's version is nightly.
+	pub fn is_nightly(&self) -> bool {
+		self.version == "nightly"
+	}
+
+	/// Checks if the manifest's fields are valid.
+	///
+	/// The following checks are done:
+	/// * `version` contains only alphanumeric characters or `['.', '-', '+']`.
+	/// * `url` is not None for any architecture (`architecture.<arch>.url`), or the common field (`common.url`) is not None.
+	pub fn validate(&self) -> Result<()> {
+		use Error::*;
+
+		if let Some(invalid) = re_invalid_version().find(&self.version) {
+			return Err(InvalidVersion {
+				version: self.version.clone(),
+				invalid: invalid.as_str().to_owned(),
+			});
+		}
+
+		if self.url().is_none() {
+			return Err(UrlsNotFound);
+		}
+
+		Ok(())
 	}
 }
 

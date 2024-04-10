@@ -658,6 +658,7 @@ impl Buckets {
 		search.next().ok_or(Error::ManifestNotFound)
 	}
 }
+
 #[cfg(test)]
 mod tests {
 	use std::fs;
