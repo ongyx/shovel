@@ -13,6 +13,7 @@ pub mod error;
 pub mod json;
 pub mod manifest;
 pub mod persist;
+pub mod powershell;
 pub mod shovel;
 pub mod timestamp;
 
