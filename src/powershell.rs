@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::io;
 use std::io::prelude::*;
 use std::path::Path;
@@ -45,12 +46,43 @@ impl From<process::Output> for Output {
 	}
 }
 
+/// A PowerShell expression.
+pub enum Expression {
+	/// A literal string. Single quotes are escaped.
+	Verbatim(String),
+
+	/// A string with interpolation. Double quotes are escaped.
+	Expandable(String),
+
+	/// A raw expression. No escaping is done.
+	Raw(String),
+}
+
+impl Display for Expression {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		use Expression::*;
+
+		match self {
+			Verbatim(str) => {
+				write!(f, "'{}'", str.replace('\'', "`'"))
+			}
+			Expandable(str) => {
+				write!(f, "\"{}\"", str.replace('"', "`\""))
+			}
+			Raw(str) => {
+				write!(f, "{}", str)
+			}
+		}
+	}
+}
+
 /// A PowerShell script runner.
 ///
 /// Scripts are executed in a sub-process for idempotency.
 pub struct Powershell {
 	executable: PathBuf,
 	prelude: String,
+	vars: Vec<(String, Expression)>,
 }
 
 impl Powershell {
@@ -68,17 +100,55 @@ impl Powershell {
 		Self {
 			executable,
 			prelude: String::new(),
+			vars: Vec::new(),
 		}
 	}
 
-	/// Sets the prelude script.
+	/// Sets the runner's prelude script.
 	///
-	/// The prelude script is executed by PowerShell before any other script.
+	/// The prelude script is executed before scripts from `PowerShell::execute` or `PowerShell::run`,
+	/// but after variables are assigned.
+	///
+	/// # Arguments
+	///
+	/// * `script` - The prelude script.
 	pub fn prelude<S>(&mut self, script: S) -> &mut Self
 	where
 		S: Into<String>,
 	{
 		self.prelude = script.into();
+		self
+	}
+
+	/// Adds a variable to the runner.
+	/// All scripts, including the prelude script, will be able to access this variable.
+	///
+	/// Variables are guaranteed to have the same order as when they were added.
+	///
+	/// # Arguments
+	///
+	/// * `name`: The variable name.
+	/// * `expr`: The variable expression.
+	pub fn var<S>(&mut self, name: S, expr: Expression) -> &mut Self
+	where
+		S: Into<String>,
+	{
+		self.vars.push((name.into(), expr));
+		self
+	}
+
+	/// Adds multiple variables to the runner.
+	///
+	/// # Arguments
+	///
+	/// * `vars`: The variables to add.
+	pub fn vars<I, S>(&mut self, vars: I) -> &mut Self
+	where
+		I: IntoIterator<Item = (S, Expression)>,
+		S: Into<String>,
+	{
+		self.vars
+			.extend(vars.into_iter().map(|(name, expr)| (name.into(), expr)));
 		self
 	}
 
@@ -96,8 +166,15 @@ impl Powershell {
 		// SAFETY: stdin for a new child process should never be None.
 		let stdin = child.stdin.as_mut().unwrap();
 
+		// Add environment variables.
+		for (key, value) in self.vars.iter() {
+			writeln!(stdin, "${} = {}", key, value)?;
+		}
+
+		// Add the prelude script.
 		writeln!(stdin, "{}", self.prelude)?;
 
+		// Finally, add the script from the reader.
 		io::copy(reader, stdin)?;
 
 		// As wait_with_output closes stdin, the actual execution of the script occurs here.
@@ -163,8 +240,6 @@ mod tests {
 		let output = powershell().run("Write-Host 'a'\nWrite-Host 'b'").unwrap();
 		let lines: Vec<_> = output.stdout.lines().collect();
 
-		dbg!(output.stderr);
-
 		assert!(output.status.success());
 		assert_eq!(lines, vec!["a", "b"]);
 	}
@@ -177,9 +252,25 @@ mod tests {
 			.unwrap();
 		let lines: Vec<_> = output.stdout.lines().collect();
 
-		dbg!(output.stderr);
-
 		assert!(output.status.success());
 		assert_eq!(lines, vec!["Initializing...", "Done."]);
+	}
+
+	#[test]
+	fn vars() {
+		use Expression::*;
+
+		let output = powershell()
+			.vars([
+				("foo", Verbatim("a".to_owned())),
+				("bar", Expandable("${foo}b".to_owned())),
+				("baz", Raw("$foo, $bar".to_owned())),
+			])
+			.run("Write-Host $baz")
+			.unwrap();
+		let lines: Vec<_> = output.stdout.lines().collect();
+
+		assert!(output.status.success());
+		assert_eq!(lines, vec!["a ab"]);
 	}
 }
