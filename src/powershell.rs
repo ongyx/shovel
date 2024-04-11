@@ -45,8 +45,11 @@ impl From<process::Output> for Output {
 }
 
 /// A PowerShell script runner.
+///
+/// Scripts are executed in a sub-process for idempotency.
 pub struct Powershell {
 	executable: PathBuf,
+	prelude: String,
 }
 
 impl Powershell {
@@ -61,7 +64,21 @@ impl Powershell {
 	{
 		let executable = executable.as_ref().to_owned();
 
-		Self { executable }
+		Self {
+			executable,
+			prelude: String::new(),
+		}
+	}
+
+	/// Sets the prelude script.
+	///
+	/// The prelude script is executed by PowerShell before any other script.
+	pub fn prelude<S>(&mut self, script: S) -> &mut Self
+	where
+		S: Into<String>,
+	{
+		self.prelude = script.into();
+		self
 	}
 
 	/// Executes the contents of a reader as a PowerShell script and returns its output.
@@ -78,9 +95,11 @@ impl Powershell {
 		// SAFETY: stdin for a new child process should never be None.
 		let stdin = child.stdin.as_mut().unwrap();
 
+		writeln!(stdin, "{}", self.prelude)?;
+
 		io::copy(reader, stdin)?;
 
-		// As wait_with_output closes stdin, the actual execution of the script occurs here, when PowerShell returns EOF.
+		// As wait_with_output closes stdin, the actual execution of the script occurs here.
 		Ok(child.wait_with_output()?.into())
 	}
 
@@ -115,9 +134,7 @@ impl Powershell {
 
 impl Default for Powershell {
 	fn default() -> Self {
-		Self {
-			executable: executable().to_owned(),
-		}
+		Self::new(executable())
 	}
 }
 
@@ -149,5 +166,19 @@ mod tests {
 
 		assert!(output.status.success());
 		assert_eq!(lines, vec!["a", "b"]);
+	}
+
+	#[test]
+	fn prelude() {
+		let output = powershell()
+			.prelude("Write-Host 'Initializing...'")
+			.run("Write-Host 'Done.'")
+			.unwrap();
+		let lines: Vec<_> = output.stdout.lines().collect();
+
+		dbg!(output.stderr);
+
+		assert!(output.status.success());
+		assert_eq!(lines, vec!["Initializing...", "Done."]);
 	}
 }

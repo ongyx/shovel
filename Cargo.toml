@@ -1,6 +1,6 @@
 [package]
 name = "shovel"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 authors = ["Ong Yong Xin"]
 description = "A package manager for Windows, based off of Scoop."
