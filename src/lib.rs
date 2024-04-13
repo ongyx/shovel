@@ -26,7 +26,6 @@ pub use app::Apps;
 pub use bucket::Bucket;
 pub use bucket::Buckets;
 pub use cache::Cache;
-pub use cache::Key;
 pub use config::Config;
 pub use error::Error;
 pub use error::Result;

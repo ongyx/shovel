@@ -56,6 +56,11 @@ impl Config {
 		Path::new(&self.install_dir)
 	}
 
+	/// Checks if the installation directory is global.
+	pub fn is_global(&self) -> bool {
+		self.install_dir() == global_install_dir()
+	}
+
 	/// Returns the directory where apps are stored.
 	pub fn app_dir(&self) -> PathBuf {
 		self.install_dir().join("apps")
@@ -75,12 +80,17 @@ impl Config {
 	pub fn persist_dir(&self) -> PathBuf {
 		self.install_dir().join("persist")
 	}
+
+	/// Returns the directory where PowerShell modules are symlinked.
+	pub fn module_dir(&self) -> PathBuf {
+		self.install_dir().join("modules")
+	}
 }
 
 impl Default for Config {
 	fn default() -> Self {
 		Config {
-			install_dir: util::osstr_to_string(user_install_dir().as_os_str()),
+			install_dir: util::path_to_string(user_install_dir()),
 		}
 	}
 }

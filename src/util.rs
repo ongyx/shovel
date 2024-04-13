@@ -1,4 +1,4 @@
-use std::ffi;
+use std::ffi::OsStr;
 use std::fs;
 use std::io;
 use std::path::Path;
@@ -7,13 +7,29 @@ use std::time;
 
 use crate::timestamp::Timestamp;
 
-/// Converts an OsStr to a String.
+/// Converts an OsStr to a string.
+/// This is a lossy operation if the OsStr has characters not encoded in UTF-8.
 ///
 /// # Arguments
 ///
 /// * `osstr` - The OsStr to convert.
-pub fn osstr_to_string(osstr: &ffi::OsStr) -> String {
-	osstr.to_str().unwrap().to_owned()
+#[inline]
+pub fn osstr_to_string(osstr: &OsStr) -> String {
+	osstr.to_string_lossy().into_owned()
+}
+
+/// Converts a path to a string.
+/// This is a lossy operation if the path has characters not encoded in UTF-8.
+///
+/// # Arguments
+///
+/// * `path` - The path to convert.
+#[inline]
+pub fn path_to_string<P>(path: P) -> String
+where
+	P: AsRef<Path>,
+{
+	osstr_to_string(path.as_ref().as_os_str())
 }
 
 /// An iterator over directories in a path. Created by the `subdirs` function.
