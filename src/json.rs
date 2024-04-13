@@ -8,12 +8,12 @@ use serde_path_to_error;
 /// A JSON (de)serialization error.
 pub type Error = serde_path_to_error::Error<serde_json::Error>;
 
-/// Deserialize a type `T` from a JSON reader.
+/// Deserialize a type `T` from a reader as JSON.
 /// The reader is wrapped in a buffered reader.
 ///
 /// # Arguments
 ///
-/// * `path` - The path to the JSON file.
+/// * `reader` - The reader to deserialize from.
 pub fn from_reader<R, T>(reader: R) -> Result<T, Error>
 where
 	R: io::Read,
@@ -25,6 +25,40 @@ where
 	let value = serde_path_to_error::deserialize(de)?;
 
 	Ok(value)
+}
+
+/// Serialize a type `T` to a writer as JSON.
+/// The writer is wrapped in a buffered writer.
+///
+/// # Arguments
+///
+/// * `writer` - The writer to serialize to.
+/// * `value` - The value to serialize.
+pub fn to_writer<W, T>(writer: W, value: &T) -> Result<(), Error>
+where
+	W: io::Write,
+	T: serde::Serialize,
+{
+	let writer = io::BufWriter::new(writer);
+	let ser = &mut serde_json::Serializer::new(writer);
+
+	serde_path_to_error::serialize(value, ser)
+}
+
+/// Serialize a type `T` to a string as JSON.
+///
+/// # Arguments
+///
+/// * `value` - The value to serialize.
+pub fn to_string<T>(value: &T) -> Result<String, Error>
+where
+	T: serde::Serialize,
+{
+	let mut buf = Vec::new();
+
+	to_writer(&mut buf, value)?;
+
+	Ok(String::from_utf8(buf).expect("JSON is valid UTF-8"))
 }
 
 /// Macro for generating a JSON enum.

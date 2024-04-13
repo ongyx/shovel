@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::process;
 use std::sync::OnceLock;
 
-use which;
+use crate::json;
 
 /// Returns the path to the newest PowerShell executable available,
 /// either PowerShell Core (pwsh.exe, v6+) if it's installed,
@@ -56,6 +56,26 @@ pub enum Expression {
 
 	/// A raw expression. No escaping is done.
 	Raw(String),
+
+	/// A boolean expression.
+	Bool(bool),
+}
+
+impl Expression {
+	/// Convert a serializable type `T` to a PowerShell object.
+	///
+	/// # Arguments
+	///
+	/// `value` - The value to convert.
+	pub fn object<T>(value: &T) -> Result<Self, json::Error>
+	where
+		T: serde::Serialize,
+	{
+		let value = json::to_string(value)?;
+
+		// TODO: Is there a more efficient way of passing the object to PowerShell?
+		Ok(Self::Raw(format!("{} | ConvertTo-Json", value)))
+	}
 }
 
 impl Display for Expression {
@@ -64,7 +84,7 @@ impl Display for Expression {
 
 		match self {
 			Verbatim(str) => {
-				write!(f, "'{}'", str.replace('\'', "`'"))
+				write!(f, "'{}'", str.replace('\'', "''"))
 			}
 			Expandable(str) => {
 				write!(f, "\"{}\"", str.replace('"', "`\""))
@@ -72,7 +92,58 @@ impl Display for Expression {
 			Raw(str) => {
 				write!(f, "{}", str)
 			}
+			Bool(bool) => {
+				write!(f, "{}", if *bool { "$true" } else { "$false" })
+			}
 		}
+	}
+}
+
+impl From<String> for Expression {
+	fn from(value: String) -> Self {
+		Self::Verbatim(value)
+	}
+}
+
+impl From<bool> for Expression {
+	fn from(value: bool) -> Self {
+		Self::Bool(value)
+	}
+}
+
+/// A PowerShell function.
+pub struct Function<S>
+where
+	S: AsRef<str>,
+{
+	/// The function's name.
+	pub name: S,
+
+	/// The function's positional arguments.
+	pub parameters: Vec<S>,
+
+	/// The body of the function.
+	pub body: S,
+}
+
+impl<S> Display for Function<S>
+where
+	S: AsRef<str>,
+{
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		let parameters: Vec<_> = self
+			.parameters
+			.iter()
+			.map(|s| format!("${}", s.as_ref()))
+			.collect();
+
+		writeln!(
+			f,
+			"function {}({}) {{ {} }}",
+			self.name.as_ref(),
+			parameters.join(", "),
+			self.body.as_ref(),
+		)
 	}
 }
 
@@ -83,6 +154,7 @@ pub struct Powershell {
 	executable: PathBuf,
 	prelude: String,
 	vars: Vec<(String, Expression)>,
+	funcs: Vec<String>,
 }
 
 impl Powershell {
@@ -101,6 +173,7 @@ impl Powershell {
 			executable,
 			prelude: String::new(),
 			vars: Vec::new(),
+			funcs: Vec::new(),
 		}
 	}
 
@@ -152,6 +225,33 @@ impl Powershell {
 		self
 	}
 
+	/// Adds a function to the runner.
+	///
+	/// # Arguments
+	///
+	/// * `func`: The function to add.
+	pub fn func<S>(&mut self, func: Function<S>) -> &mut Self
+	where
+		S: AsRef<str>,
+	{
+		self.funcs.push(func.to_string());
+		self
+	}
+
+	/// Adds multiple functions to the runner.
+	///
+	/// # Arguments
+	///
+	/// * `funcs`: The functions to add.
+	pub fn funcs<I, S>(&mut self, funcs: I) -> &mut Self
+	where
+		I: IntoIterator<Item = Function<S>>,
+		S: AsRef<str>,
+	{
+		self.funcs.extend(funcs.into_iter().map(|f| f.to_string()));
+		self
+	}
+
 	/// Executes the contents of a reader as a PowerShell script and returns its output.
 	///
 	/// # Arguments
@@ -166,9 +266,18 @@ impl Powershell {
 		// SAFETY: stdin for a new child process should never be None.
 		let stdin = child.stdin.as_mut().unwrap();
 
-		// Add environment variables.
-		for (key, value) in self.vars.iter() {
+		// Bail on all uncaught errors.
+		// It's possible for commands to fail if they don't exist.
+		writeln!(stdin, "$ErrorActionPreference = 'Stop'; trap {{ exit 1 }}")?;
+
+		// Add variables.
+		for (key, value) in &self.vars {
 			writeln!(stdin, "${} = {}", key, value)?;
+		}
+
+		// Add functions.
+		for func in &self.funcs {
+			writeln!(stdin, "{}", func)?;
 		}
 
 		// Add the prelude script.
@@ -229,8 +338,6 @@ mod tests {
 		let output = powershell().run("Write-Host 'Hello World!'").unwrap();
 		let lines: Vec<_> = output.stdout.lines().collect();
 
-		dbg!(output.stderr);
-
 		assert!(output.status.success());
 		assert_eq!(lines, vec!["Hello World!"]);
 	}
@@ -272,5 +379,50 @@ mod tests {
 
 		assert!(output.status.success());
 		assert_eq!(lines, vec!["a ab"]);
+	}
+
+	#[test]
+	fn error() {
+		let output = powershell().run("this-is-an-nonexistent-script").unwrap();
+
+		assert!(!output.status.success());
+	}
+
+	#[test]
+	fn funcs() {
+		use Expression::Verbatim;
+
+		let output = powershell()
+			.vars([("init", Verbatim("I'm initialized!".to_owned()))])
+			.funcs([
+				Function {
+					name: "Greet",
+					parameters: vec!["name"],
+					body: r#"
+					if ($name) {
+						Write-Host "Hello $name!"
+					} else {
+						Write-Host "Hello!"
+					}
+					"#,
+				},
+				Function {
+					name: "Check-Variable",
+					parameters: vec![],
+					body: "Write-Host $init",
+				},
+			])
+			.run(
+				r#"
+				Greet "World"
+				Greet
+				Check-Variable
+				"#,
+			)
+			.unwrap();
+		let lines: Vec<_> = output.stdout.lines().collect();
+
+		assert!(output.status.success());
+		assert_eq!(lines, vec!["Hello World!", "Hello!", "I'm initialized!"]);
 	}
 }
