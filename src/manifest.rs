@@ -18,14 +18,17 @@ macro_rules! getter {
             /// Returns the architecture-specific or common value for the field in that order.
 			#[inline]
             pub fn $name(&self) -> Option<&$type> {
-				let arches = self.$inner.as_ref()?;
-
-				for arch in Arch::compatible() {
-	                if let Some(arch) = arches.get(arch) {
-	                    if let Some(value) = arch.$name.as_ref() {
-	                        return Some(value)
-	                    }
-	                }
+            	// If there are any architectures...
+				if let Some(arches) = self.$inner.as_ref() {
+					// For each compatible architecture, get its manifest.
+					for arch in Arch::compatible() {
+						// If the compatible architecture exists and its manifest value is not None, return it.
+		                if let Some(arch) = arches.get(arch) {
+		                    if let Some(value) = arch.$name.as_ref() {
+		                        return Some(value)
+		                    }
+		                }
+					}
 				}
 
                 // Return the top-level field.
@@ -41,14 +44,14 @@ macro_rules! list_getter {
             /// Returns the architecture-specific or common list as a slice for the field in that order.
 			#[inline]
             pub fn $name(&self) -> Option<&[$type]> {
-				let arches = self.$inner.as_ref()?;
-
-				for arch in Arch::compatible() {
-	                if let Some(arch) = arches.get(arch) {
-	                    if let Some(list) = arch.$name.as_deref() {
-	                        return Some(list)
-	                    }
-	                }
+				if let Some(arches) = self.$inner.as_ref() {
+					for arch in Arch::compatible() {
+		                if let Some(arch) = arches.get(arch) {
+		                    if let Some(list) = arch.$name.as_deref() {
+		                        return Some(list)
+		                    }
+		                }
+					}
 				}
 
                 // Return the top-level field.
@@ -99,6 +102,15 @@ json_struct! {
 		/// The items in the list.
 		#[serde_as(as = "OneOrMany<_>")]
 		pub items: Vec<T>,
+	}
+}
+
+impl<T> From<Vec<T>> for List<T>
+where
+	T: Serialize + DeserializeOwned,
+{
+	fn from(items: Vec<T>) -> Self {
+		Self { items }
 	}
 }
 
@@ -806,6 +818,16 @@ impl Manifest {
 		}
 	}
 
+	/// Returns the installer script, if any.
+	pub fn installer_script(&self) -> Option<&[String]> {
+		self.installer().and_then(|i| i.script.as_deref())
+	}
+
+	/// Returns the uninstaller script, if any.
+	pub fn uninstaller_script(&self) -> Option<&[String]> {
+		self.uninstaller().and_then(|i| i.script.as_deref())
+	}
+
 	/// Checks if the manifest's version is nightly.
 	pub fn is_nightly(&self) -> bool {
 		self.version == "nightly"
@@ -967,5 +989,41 @@ mod tests {
 				Bin::Path("baz".to_owned())
 			])
 		);
+	}
+
+	#[test]
+	fn getter_arch() {
+		let manifest = Manifest {
+			architecture: Some(HashMap::from([(
+				Arch::X86,
+				ManifestArch {
+					url: Some(vec!["https://sourceforge.com".into()].into()),
+					..Default::default()
+				},
+			)])),
+			common: ManifestArch {
+				url: Some(vec!["https://github.com".into()].into()),
+				..Default::default()
+			},
+			..Default::default()
+		};
+
+		assert_eq!(
+			manifest.url(),
+			Some(&["https://sourceforge.com".into()][..])
+		);
+	}
+
+	#[test]
+	fn getter_common() {
+		let manifest = Manifest {
+			common: ManifestArch {
+				url: Some(vec!["https://github.com".into()].into()),
+				..Default::default()
+			},
+			..Default::default()
+		};
+
+		assert_eq!(manifest.url(), Some(&["https://github.com".into()][..]));
 	}
 }

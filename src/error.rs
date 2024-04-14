@@ -3,6 +3,7 @@ use std::io;
 use crate::app;
 use crate::bucket;
 use crate::cache;
+use crate::hook;
 use crate::json;
 use crate::manifest;
 
@@ -20,6 +21,10 @@ pub enum Error {
 	// A cache error.
 	#[error(transparent)]
 	Cache(#[from] cache::Error),
+
+	// A hook error.
+	#[error(transparent)]
+	Hook(#[from] hook::Error),
 
 	// A manifest error.
 	#[error(transparent)]
