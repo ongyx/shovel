@@ -25,6 +25,7 @@ pub fn executable() -> &'static PathBuf {
 ///
 /// Depending on the version of PowerShell, newlines are not guaranteed to be CRLF.
 /// Use `str::lines` to iterate over lines if needed.
+#[derive(Debug)]
 pub struct Output {
 	/// The exit status.
 	pub status: process::ExitStatus,
@@ -111,50 +112,12 @@ impl From<bool> for Expression {
 	}
 }
 
-/// A PowerShell function.
-pub struct Function<S>
-where
-	S: AsRef<str>,
-{
-	/// The function's name.
-	pub name: S,
-
-	/// The function's positional arguments.
-	pub parameters: Vec<S>,
-
-	/// The body of the function.
-	pub body: S,
-}
-
-impl<S> Display for Function<S>
-where
-	S: AsRef<str>,
-{
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		let parameters: Vec<_> = self
-			.parameters
-			.iter()
-			.map(|s| format!("${}", s.as_ref()))
-			.collect();
-
-		writeln!(
-			f,
-			"function {}({}) {{ {} }}",
-			self.name.as_ref(),
-			parameters.join(", "),
-			self.body.as_ref(),
-		)
-	}
-}
-
 /// A PowerShell script runner.
 ///
 /// Scripts are executed in a sub-process for idempotency.
 pub struct Powershell {
 	executable: PathBuf,
 	prelude: String,
-	vars: Vec<(String, Expression)>,
-	funcs: Vec<String>,
 }
 
 impl Powershell {
@@ -172,29 +135,25 @@ impl Powershell {
 		Self {
 			executable,
 			prelude: String::new(),
-			vars: Vec::new(),
-			funcs: Vec::new(),
 		}
 	}
 
-	/// Sets the runner's prelude script.
-	///
-	/// The prelude script is executed before scripts from `PowerShell::execute` or `PowerShell::run`,
-	/// but after variables are assigned.
+	/// Adds a prelude script to the runner.
+	/// Prelude scripts are always executed before scripts from `PowerShell::execute` or `PowerShell::run`.
 	///
 	/// # Arguments
 	///
 	/// * `script` - The prelude script.
 	pub fn prelude<S>(&mut self, script: S) -> &mut Self
 	where
-		S: Into<String>,
+		S: AsRef<str>,
 	{
-		self.prelude = script.into();
+		self.prelude.push_str(script.as_ref());
+		self.prelude.push_str("\r\n");
 		self
 	}
 
-	/// Adds a variable to the runner.
-	/// All scripts, including the prelude script, will be able to access this variable.
+	/// Adds a prelude variable to the runner.
 	///
 	/// Variables are guaranteed to have the same order as when they were added.
 	///
@@ -206,11 +165,10 @@ impl Powershell {
 	where
 		S: Into<String>,
 	{
-		self.vars.push((name.into(), expr));
-		self
+		self.prelude(format!("${} = {}", name.into(), expr))
 	}
 
-	/// Adds multiple variables to the runner.
+	/// Adds multiple prelude variables to the runner.
 	///
 	/// # Arguments
 	///
@@ -220,35 +178,10 @@ impl Powershell {
 		I: IntoIterator<Item = (S, Expression)>,
 		S: Into<String>,
 	{
-		self.vars
-			.extend(vars.into_iter().map(|(name, expr)| (name.into(), expr)));
-		self
-	}
+		for (name, expr) in vars {
+			self.var(name, expr);
+		}
 
-	/// Adds a function to the runner.
-	///
-	/// # Arguments
-	///
-	/// * `func`: The function to add.
-	pub fn func<S>(&mut self, func: Function<S>) -> &mut Self
-	where
-		S: AsRef<str>,
-	{
-		self.funcs.push(func.to_string());
-		self
-	}
-
-	/// Adds multiple functions to the runner.
-	///
-	/// # Arguments
-	///
-	/// * `funcs`: The functions to add.
-	pub fn funcs<I, S>(&mut self, funcs: I) -> &mut Self
-	where
-		I: IntoIterator<Item = Function<S>>,
-		S: AsRef<str>,
-	{
-		self.funcs.extend(funcs.into_iter().map(|f| f.to_string()));
 		self
 	}
 
@@ -270,20 +203,10 @@ impl Powershell {
 		// It's possible for commands to fail if they don't exist.
 		writeln!(stdin, "$ErrorActionPreference = 'Stop'; trap {{ exit 1 }}")?;
 
-		// Add variables.
-		for (key, value) in &self.vars {
-			writeln!(stdin, "${} = {}", key, value)?;
-		}
-
-		// Add functions.
-		for func in &self.funcs {
-			writeln!(stdin, "{}", func)?;
-		}
-
-		// Add the prelude script.
+		// Write the prelude script.
 		writeln!(stdin, "{}", self.prelude)?;
 
-		// Finally, add the script from the reader.
+		// Write the script from the reader.
 		io::copy(reader, stdin)?;
 
 		// As wait_with_output closes stdin, the actual execution of the script occurs here.
@@ -295,8 +218,11 @@ impl Powershell {
 	/// # Arguments
 	///
 	/// * `script` - The PowerShell script to run.
-	pub fn run(&self, script: &str) -> io::Result<Output> {
-		let mut cursor = io::Cursor::new(script);
+	pub fn run<S>(&self, script: S) -> io::Result<Output>
+	where
+		S: AsRef<str>,
+	{
+		let mut cursor = io::Cursor::new(script.as_ref());
 
 		self.execute(&mut cursor)
 	}
@@ -386,43 +312,5 @@ mod tests {
 		let output = powershell().run("this-is-an-nonexistent-script").unwrap();
 
 		assert!(!output.status.success());
-	}
-
-	#[test]
-	fn funcs() {
-		use Expression::Verbatim;
-
-		let output = powershell()
-			.vars([("init", Verbatim("I'm initialized!".to_owned()))])
-			.funcs([
-				Function {
-					name: "Greet",
-					parameters: vec!["name"],
-					body: r#"
-					if ($name) {
-						Write-Host "Hello $name!"
-					} else {
-						Write-Host "Hello!"
-					}
-					"#,
-				},
-				Function {
-					name: "Check-Variable",
-					parameters: vec![],
-					body: "Write-Host $init",
-				},
-			])
-			.run(
-				r#"
-				Greet "World"
-				Greet
-				Check-Variable
-				"#,
-			)
-			.unwrap();
-		let lines: Vec<_> = output.stdout.lines().collect();
-
-		assert!(output.status.success());
-		assert_eq!(lines, vec!["Hello World!", "Hello!", "I'm initialized!"]);
 	}
 }

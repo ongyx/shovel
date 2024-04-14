@@ -76,8 +76,10 @@ impl VerifyCommand {
 
 		let name = bucket.name();
 		let verified = bucket.manifests()?.map(move |item| {
+			let manifest = item.manifest.map(|m| m.validate().map(|_| m));
+
 			// Check if the manifest parsed successfully.
-			let verified = match item.manifest {
+			let verified = match manifest {
 				Ok(_) => {
 					// Only verify against the schema if successfully parsed.
 					if self.schema {
