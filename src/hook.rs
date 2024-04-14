@@ -86,6 +86,9 @@ pub struct Context<'c> {
 	/// The current configuration.
 	pub config: &'c Config,
 
+	/// The architecture to install for the app.
+	pub arch: Arch,
+
 	/// The command in use.
 	pub command: Command,
 }
@@ -212,13 +215,15 @@ impl<'h> Hook<'h> {
 		use Script::*;
 
 		let manifest = self.context.manifest;
+		let arch = self.context.arch;
+
 		let hook = match script {
-			Install => manifest.installer_script(),
-			Uninstall => manifest.uninstaller_script(),
-			PreInstall => manifest.pre_install(),
-			PostInstall => manifest.post_install(),
-			PreUninstall => manifest.pre_uninstall(),
-			PostUninstall => manifest.post_uninstall(),
+			Install => manifest.installer_script(arch),
+			Uninstall => manifest.uninstaller_script(arch),
+			PreInstall => manifest.pre_install(arch),
+			PostInstall => manifest.post_install(arch),
+			PreUninstall => manifest.pre_uninstall(arch),
+			PostUninstall => manifest.post_uninstall(arch),
 		}
 		.unwrap_or_default()
 		.join("\r\n");
@@ -255,6 +260,7 @@ mod tests {
 				..Default::default()
 			},
 			config: &Default::default(),
+			arch: Arch::X86_64,
 			command: Command::Install,
 		};
 

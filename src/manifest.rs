@@ -17,22 +17,13 @@ macro_rules! getter {
         $(
             /// Returns the architecture-specific or common value for the field in that order.
 			#[inline]
-            pub fn $name(&self) -> Option<&$type> {
-            	// If there are any architectures...
-				if let Some(arches) = self.$inner.as_ref() {
-					// For each compatible architecture, get its manifest.
-					for arch in Arch::compatible() {
-						// If the compatible architecture exists and its manifest value is not None, return it.
-		                if let Some(arch) = arches.get(arch) {
-		                    if let Some(value) = arch.$name.as_ref() {
-		                        return Some(value)
-		                    }
-		                }
-					}
-				}
-
-                // Return the top-level field.
-                return self.common.$name.as_ref();
+            pub fn $name(&self, arch: Arch) -> Option<&$type> {
+            	self.$inner
+            		.as_ref()
+	            	// If the architecture is defined, return the architecture-specific value.
+            		.and_then(|arches| arches.get(&arch)?.$name.as_ref())
+	                // Return the common value.
+            		.or_else(|| self.common.$name.as_ref())
             }
         )*
     };
@@ -43,19 +34,13 @@ macro_rules! list_getter {
         $(
             /// Returns the architecture-specific or common list as a slice for the field in that order.
 			#[inline]
-            pub fn $name(&self) -> Option<&[$type]> {
-				if let Some(arches) = self.$inner.as_ref() {
-					for arch in Arch::compatible() {
-		                if let Some(arch) = arches.get(arch) {
-		                    if let Some(list) = arch.$name.as_deref() {
-		                        return Some(list)
-		                    }
-		                }
-					}
-				}
-
-                // Return the top-level field.
-                return self.common.$name.as_deref();
+            pub fn $name(&self, arch: Arch) -> Option<&[$type]> {
+            	self.$inner
+            		.as_ref()
+	            	// If the architecture is defined, return the architecture-specific value.
+            		.and_then(|arches| arches.get(&arch)?.$name.as_deref())
+	                // Return the common value.
+            		.or_else(|| self.common.$name.as_deref())
             }
         )*
     };
@@ -818,14 +803,25 @@ impl Manifest {
 		}
 	}
 
+	/// Returns the architecture compatible with the manifest.
+	pub fn compatible(&self) -> Arch {
+		for arch in Arch::compatible() {
+			if self.url(*arch).is_some() {
+				return *arch;
+			}
+		}
+
+		Arch::native()
+	}
+
 	/// Returns the installer script, if any.
-	pub fn installer_script(&self) -> Option<&[String]> {
-		self.installer().and_then(|i| i.script.as_deref())
+	pub fn installer_script(&self, arch: Arch) -> Option<&[String]> {
+		self.installer(arch).and_then(|i| i.script.as_deref())
 	}
 
 	/// Returns the uninstaller script, if any.
-	pub fn uninstaller_script(&self) -> Option<&[String]> {
-		self.uninstaller().and_then(|i| i.script.as_deref())
+	pub fn uninstaller_script(&self, arch: Arch) -> Option<&[String]> {
+		self.uninstaller(arch).and_then(|i| i.script.as_deref())
 	}
 
 	/// Checks if the manifest's version is nightly.
@@ -848,8 +844,10 @@ impl Manifest {
 			});
 		}
 
-		if self.url().is_none() {
-			return Err(UrlsNotFound);
+		for arch in Arch::compatible() {
+			if self.url(*arch).is_none() {
+				return Err(UrlsNotFound);
+			}
 		}
 
 		Ok(())
@@ -994,23 +992,37 @@ mod tests {
 	#[test]
 	fn getter_arch() {
 		let manifest = Manifest {
-			architecture: Some(HashMap::from([(
-				Arch::X86,
-				ManifestArch {
-					url: Some(vec!["https://sourceforge.com".into()].into()),
-					..Default::default()
-				},
-			)])),
+			architecture: Some(HashMap::from([
+				(
+					Arch::X86_64,
+					ManifestArch {
+						url: Some(vec!["https://sourceforge.com".into()].into()),
+						..Default::default()
+					},
+				),
+				(
+					Arch::Arm64,
+					ManifestArch {
+						url: Some(vec!["https://github.com".into()].into()),
+						..Default::default()
+					},
+				),
+			])),
 			common: ManifestArch {
-				url: Some(vec!["https://github.com".into()].into()),
+				url: Some(vec!["https://domain.invalid".into()].into()),
 				..Default::default()
 			},
 			..Default::default()
 		};
 
 		assert_eq!(
-			manifest.url(),
-			Some(&["https://sourceforge.com".into()][..])
+			manifest.url(Arch::X86_64),
+			Some(vec!["https://sourceforge.com".into()].as_slice())
+		);
+
+		assert_eq!(
+			manifest.url(Arch::Arm64),
+			Some(vec!["https://github.com".into()].as_slice())
 		);
 	}
 
@@ -1024,6 +1036,9 @@ mod tests {
 			..Default::default()
 		};
 
-		assert_eq!(manifest.url(), Some(&["https://github.com".into()][..]));
+		assert_eq!(
+			manifest.url(Arch::X86_64),
+			Some(&["https://github.com".into()][..])
+		);
 	}
 }

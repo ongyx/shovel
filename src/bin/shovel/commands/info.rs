@@ -27,6 +27,7 @@ impl Info {
 	fn new(shovel: &mut shovel::Shovel, name: &str) -> shovel::Result<Self> {
 		let (bucket, item) = shovel.buckets.manifest(name)?;
 		let manifest = item.manifest?;
+		let arch = manifest.compatible();
 
 		let license = manifest.license.to_string();
 
@@ -55,12 +56,12 @@ impl Info {
 		}?;
 
 		let binaries = manifest
-			.bin()
+			.bin(arch)
 			.map(|bins| bins.to_string())
 			.unwrap_or_default();
 
 		let shortcuts = manifest
-			.shortcuts()
+			.shortcuts(arch)
 			.map(|shortcuts| {
 				let shortcuts: Vec<_> = shortcuts
 					.iter()

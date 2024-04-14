@@ -18,10 +18,11 @@ struct SearchInfo {
 impl SearchInfo {
 	fn new(bucket: Rc<bucket::Bucket>, item: bucket::SearchItem) -> shovel::Result<Self> {
 		let manifest = item.manifest?;
+		let arch = manifest.compatible();
 
 		let version = manifest.version.clone();
 		let binaries = manifest
-			.bin()
+			.bin(arch)
 			.map(|bins| bins.to_string())
 			.unwrap_or_default();
 
