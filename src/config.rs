@@ -52,8 +52,8 @@ json::json_struct_nodefault! {
 
 impl Config {
 	/// Returns the installation directory as a path.
-	pub fn install_dir(&self) -> &Path {
-		Path::new(&self.install_dir)
+	pub fn install_dir(&self) -> PathBuf {
+		PathBuf::from(&self.install_dir)
 	}
 
 	/// Checks if the installation directory is global.
