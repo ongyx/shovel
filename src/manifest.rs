@@ -46,6 +46,20 @@ macro_rules! list_getter {
     };
 }
 
+/// Creates a [`List`] with the same syntax as the `vec!` macro.
+///
+/// [`List`]: crate::manifest::List
+#[macro_export]
+macro_rules! list {
+	() => {
+		$crate::manifest::List { items: vec![] }
+	};
+
+	($($x:expr),+ $(,)?) => {
+		$crate::manifest::List { items: vec![$($x),*] }
+	};
+}
+
 fn re_invalid_version() -> &'static regex::Regex {
 	static RE_INVALID_VERSION: OnceLock<regex::Regex> = OnceLock::new();
 
@@ -996,20 +1010,20 @@ mod tests {
 				(
 					Arch::X86_64,
 					ManifestArch {
-						url: Some(vec!["https://sourceforge.com".into()].into()),
+						url: Some(list!["https://sourceforge.com".into()]),
 						..Default::default()
 					},
 				),
 				(
 					Arch::Arm64,
 					ManifestArch {
-						url: Some(vec!["https://github.com".into()].into()),
+						url: Some(list!["https://github.com".into()]),
 						..Default::default()
 					},
 				),
 			])),
 			common: ManifestArch {
-				url: Some(vec!["https://domain.invalid".into()].into()),
+				url: Some(list!["https://domain.invalid".into()]),
 				..Default::default()
 			},
 			..Default::default()
@@ -1030,7 +1044,7 @@ mod tests {
 	fn getter_common() {
 		let manifest = Manifest {
 			common: ManifestArch {
-				url: Some(vec!["https://github.com".into()].into()),
+				url: Some(list!["https://github.com".into()]),
 				..Default::default()
 			},
 			..Default::default()
@@ -1038,7 +1052,7 @@ mod tests {
 
 		assert_eq!(
 			manifest.url(Arch::X86_64),
-			Some(&["https://github.com".into()][..])
+			Some(vec!["https://github.com".into()].as_slice())
 		);
 	}
 }

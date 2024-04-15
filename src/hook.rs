@@ -244,6 +244,8 @@ impl<'h> Hook<'h> {
 
 #[cfg(test)]
 mod tests {
+	use crate::list;
+	use crate::manifest::Installer;
 	use crate::manifest::ManifestArch;
 
 	use super::*;
@@ -254,7 +256,7 @@ mod tests {
 			app: "test",
 			manifest: &Manifest {
 				common: ManifestArch {
-					pre_install: Some(vec!["Write-Host 'Hello World!'".into()].into()),
+					pre_install: Some(list!["Write-Host 'Hello World!'".into()]),
 					..Default::default()
 				},
 				..Default::default()
@@ -269,5 +271,30 @@ mod tests {
 		let lines: Vec<_> = output.stdout.lines().collect();
 
 		assert_eq!(lines, ["Hello World!"]);
+	}
+
+	#[test]
+	fn failure() {
+		let context = Context {
+			app: "test",
+			manifest: &Manifest {
+				common: ManifestArch {
+					installer: Some(Installer {
+						script: Some(list!["throw".into()]),
+						..Default::default()
+					}),
+					..Default::default()
+				},
+				..Default::default()
+			},
+			config: &Default::default(),
+			arch: Arch::X86_64,
+			command: Command::Install,
+		};
+
+		let hook = Hook::new(context).unwrap();
+		let result = hook.run(Script::Install);
+
+		assert!(result.is_err());
 	}
 }
