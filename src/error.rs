@@ -6,6 +6,7 @@ use crate::cache;
 use crate::hook;
 use crate::json;
 use crate::manifest;
+use crate::util;
 
 /// A catch-all error.
 #[derive(Debug, thiserror::Error)]
@@ -37,6 +38,10 @@ pub enum Error {
 	// A JSON error.
 	#[error(transparent)]
 	Json(#[from] json::Error),
+
+	// A URL parsing error.
+	#[error(transparent)]
+	Url(#[from] util::UrlError),
 }
 
 /// A catch-all result.

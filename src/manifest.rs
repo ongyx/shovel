@@ -11,6 +11,7 @@ use serde_with::OneOrMany;
 use crate::json::json_enum;
 use crate::json::json_enum_key;
 use crate::json::json_struct;
+use crate::util;
 
 macro_rules! getter {
     ($inner:ident { $($name:ident: $type:ty),* $(,)? }) => {
@@ -86,6 +87,10 @@ pub enum Error {
 	/// A manifest's shim is invalid.
 	#[error("Manifest shim must consist of [executable, name, (args...)] -  found {0:?}")]
 	InvalidShim(Vec<String>),
+
+	/// A manifest has invalid URLs.
+	#[error("Manifest URL(s) invalid: {0:?}")]
+	InvalidUrls(Vec<(String, util::UrlError)>),
 }
 
 /// A manifest result.
@@ -215,7 +220,7 @@ json_struct! {
 	/// A set of instructions for installing an app.
 	/// Either file or script must not be None.
 	pub struct Installer {
-		/// The executable to run.
+		/// The executable to run, relative to the app directory.
 		pub file: Option<String>,
 
 		/// The PowerShell script to run instead of a file.
@@ -848,9 +853,11 @@ impl Manifest {
 	/// The following checks are done:
 	/// * `version` contains only alphanumeric characters or `['.', '-', '+']`.
 	/// * `url` is not None for any architecture (`architecture.<arch>.url`), or the common field (`common.url`) is not None.
+	/// * `url` contains valid URLs with at least one path segment (`https://example.text/file.txt`) or a fragment starting with '/' (`https://example.text/file.txt#/renamed.txt`).
 	pub fn validate(&self) -> Result<()> {
 		use Error::*;
 
+		// Check the manifest's version.
 		if let Some(invalid) = re_invalid_version().find(&self.version) {
 			return Err(InvalidVersion {
 				version: self.version.clone(),
@@ -858,9 +865,24 @@ impl Manifest {
 			});
 		}
 
-		for arch in Arch::compatible() {
-			if self.url(*arch).is_none() {
-				return Err(UrlsNotFound);
+		// Check the architectures in the manifest.
+		if let Some(architecture) = self.architecture.as_ref() {
+			for arch in architecture.values() {
+				let urls = arch.url.as_deref().ok_or(Error::UrlsNotFound)?;
+
+				let errors: Vec<_> = urls
+					.iter()
+					.filter_map(|url| match util::url_to_filename(url) {
+						// Skip valid URLs.
+						Ok(_) => None,
+						// Wrap up the error in a tuple.
+						Err(err) => Some((url.to_owned(), err)),
+					})
+					.collect();
+
+				if !errors.is_empty() {
+					return Err(Error::InvalidUrls(errors));
+				}
 			}
 		}
 

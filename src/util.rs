@@ -7,6 +7,21 @@ use std::time;
 
 use crate::timestamp::Timestamp;
 
+/// A URL error.
+#[derive(Debug, thiserror::Error)]
+pub enum UrlError {
+	/// A URL failed to parse.
+	#[error(transparent)]
+	Parse(#[from] url::ParseError),
+
+	/// A URL does not have a filename.
+	#[error("Filename not found")]
+	FilenameNotFound,
+}
+
+/// A URL result.
+pub type UrlResult<T> = std::result::Result<T, UrlError>;
+
 /// Converts an OsStr to a string.
 /// This is a lossy operation if the OsStr has characters not encoded in UTF-8.
 ///
@@ -67,6 +82,11 @@ where
 	})
 }
 
+/// Returns the modification time of a path as a timestamp.
+///
+/// # Arguments
+///
+/// `path` - The path to get the timestamp for.
 pub fn mod_time<P>(path: P) -> io::Result<Timestamp>
 where
 	P: AsRef<Path>,
@@ -81,4 +101,27 @@ where
 		.as_secs();
 
 	Ok(Timestamp(timestamp as i64))
+}
+
+/// Returns the filename of a URL. The URL must be absolute.
+///
+/// If the URL has a fragment starting with '/', it is used as the filename. Otherwise, the last path segment is used.
+///
+/// # Arguments
+///
+/// * `url` - The URL to get the filename for.
+pub fn url_to_filename(url: &str) -> UrlResult<String> {
+	let url = url::Url::parse(url)?;
+
+	let filename = url
+		.fragment()
+		// If there is a URL fragment starting with '/', return it.
+		// i.e. https://example.test/original.txt#/renamed.txt returns renamed.txt instead of original.txt.
+		.and_then(|f| f.strip_prefix('/'))
+		// Otherwise, return the last path segment, if any.
+		.or_else(|| url.path_segments()?.last());
+
+	let filename = filename.ok_or(UrlError::FilenameNotFound)?;
+
+	Ok(filename.to_owned())
 }
