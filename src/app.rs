@@ -192,7 +192,7 @@ impl Versions {
 	{
 		// Explicitly cast the closure to a function pointer.
 		// This allows storing the iterator in the struct.
-		let filter_current: fn(&PathBuf) -> bool = |dir| dir.file_name().unwrap() != "current";
+		let filter_current: fn(&PathBuf) -> bool = |dir| dir.file_name().unwrap() != CURRENT;
 
 		let dirs = util::dirs(dir)?.filter(filter_current);
 
@@ -269,6 +269,15 @@ impl Apps {
 		dir
 	}
 
+	/// Returns the path to the current version of an app.
+	///
+	/// # Arguments
+	///
+	/// * `name` - The name of the app.
+	pub fn current_path(&self, name: &str) -> PathBuf {
+		self.path(name, CURRENT)
+	}
+
 	/// Opens and returns an app.
 	///
 	/// # Arguments
@@ -295,6 +304,6 @@ impl Apps {
 	/// Opens and returns an app's current version.
 	/// This is a convenience function for `get(name, "current")`.
 	pub fn open_current(&self, name: &str) -> Result<App> {
-		self.open(name, "current")
+		self.open(name, CURRENT)
 	}
 }

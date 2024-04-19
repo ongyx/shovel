@@ -6,6 +6,7 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::sync::OnceLock;
 
+use futures_util::future;
 use futures_util::StreamExt;
 use regex;
 use reqwest;
@@ -188,18 +189,19 @@ impl Cache {
 	///
 	/// * `client`: The HTTP client to use.
 	/// * `key`: The key to add.
+	/// * `progress`: A closure to track download progress for the key. Takes (key, current, total) where current and total are in bytes.
 	pub async fn add<P>(
 		&self,
 		client: reqwest::Client,
-		key: &Key,
+		key: Key,
 		progress: Option<P>,
 	) -> Result<(bool, PathBuf)>
 	where
 		P: Fn(&Key, u64, u64),
 	{
-		let path = self.path(key);
+		let path = self.path(&key);
 
-		if self.exists(key)? {
+		if self.exists(&key)? {
 			// The file is cached.
 			return Ok((true, path));
 		}
@@ -211,7 +213,7 @@ impl Cache {
 
 		let mut stream = resp.bytes_stream();
 
-		let mut file = fs::File::open(self.path(key))?;
+		let mut file = fs::File::open(&path)?;
 
 		while let Some(chunk) = stream.next().await {
 			let chunk = chunk?;
@@ -221,11 +223,37 @@ impl Cache {
 			current += chunk.len() as u64;
 
 			if let Some(ref progress) = progress {
-				progress(key, current, total);
+				progress(&key, current, total);
 			}
 		}
 
 		Ok((false, path))
+	}
+
+	/// Add multiple keys to the cache and returns a Vec of 2-tuples (cached, path).
+	///
+	/// # Arguments
+	///
+	/// * `client` - The HTTP client to use.
+	/// * `keys` - An iterator over keys to add.
+	/// * `progress`: A closure to track download progress for each key. Takes (key, current, total) where current and total are in bytes.
+	pub async fn add_multiple<I, P>(
+		&self,
+		client: reqwest::Client,
+		keys: I,
+		progress: Option<P>,
+	) -> Result<Vec<(bool, PathBuf)>>
+	where
+		I: IntoIterator<Item = Key>,
+		P: Fn(&Key, u64, u64),
+	{
+		let futures = keys
+			.into_iter()
+			.map(|k| self.add(client.clone(), k, progress.as_ref()));
+
+		let downloaded = future::try_join_all(futures).await?;
+
+		Ok(downloaded)
 	}
 
 	/// Removes all cached files for a specific app.
