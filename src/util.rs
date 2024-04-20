@@ -22,12 +22,12 @@ pub enum UrlError {
 /// A URL result.
 pub type UrlResult<T> = std::result::Result<T, UrlError>;
 
-/// Converts an OsStr to a string.
-/// This is a lossy operation if the OsStr has characters not encoded in UTF-8.
+/// Converts an `OsStr` to a string.
+/// This is a lossy operation if the `OsStr` has characters not encoded in UTF-8.
 ///
 /// # Arguments
 ///
-/// * `osstr` - The OsStr to convert.
+/// * `osstr` - The `OsStr` to convert.
 #[inline]
 pub fn osstr_to_string(osstr: &OsStr) -> String {
 	osstr.to_string_lossy().into_owned()
@@ -100,6 +100,7 @@ where
 		.unwrap()
 		.as_secs();
 
+	#[allow(clippy::cast_possible_wrap)]
 	Ok(Timestamp(timestamp as i64))
 }
 

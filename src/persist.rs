@@ -31,6 +31,10 @@ impl Persist {
 	/// # Arguments
 	///
 	/// * `name` - The app's name.
+	///
+	/// # Errors
+	///
+	/// If the directory could not be created, the IO error is returned.
 	pub fn add(&self, name: &str) -> io::Result<PathBuf> {
 		let path = self.path(name);
 
@@ -44,6 +48,10 @@ impl Persist {
 	/// # Arguments
 	///
 	/// * `name` - The app's name.
+	///
+	/// # Errors
+	///
+	/// If the directory could not be removed, the IO error is returned.
 	pub fn remove(&self, name: &str) -> io::Result<()> {
 		fs::remove_dir_all(self.path(name))
 	}
@@ -53,6 +61,7 @@ impl Persist {
 	/// # Arguments
 	///
 	/// * `name` - The app's name.
+	#[must_use]
 	pub fn path(&self, name: &str) -> PathBuf {
 		self.dir.join(name)
 	}

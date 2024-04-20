@@ -77,6 +77,10 @@ impl Bucket {
 	/// # Arguments
 	///
 	/// * `dir` - The path to the bucket. It must point to a directory.
+	///
+	/// # Errors
+	///
+	/// If dir is not a valid Git repository, [`Error::Git`] is returned.
 	pub fn open<P>(dir: P) -> Result<Self>
 	where
 		P: AsRef<Path>,
@@ -94,42 +98,45 @@ impl Bucket {
 	/// * `url` - The Git URL of the remote bucket.
 	/// * `dir` - The path to clone to. It must not exist yet.
 	/// * `builder` - The builder to clone with. If None, a new builder is created.
+	///
+	/// # Errors
+	///
+	/// If the remote bucket failed to clone, [`Error::Git`] is returned.
 	pub fn clone<P>(url: &str, dir: P, builder: Option<&mut build::RepoBuilder>) -> Result<Self>
 	where
 		P: AsRef<Path>,
 	{
 		let dir = dir.as_ref().to_owned();
 
-		// This is needed to get a &mut reference.
-		let mut new_builder = None;
+		// A temporary builder is needed if the one passed in is None.
+		let mut temp_builder = build::RepoBuilder::new();
 
-		let builder = builder
-			.or_else(|| {
-				new_builder = Some(build::RepoBuilder::new());
-				new_builder.as_mut()
-			})
-			// SAFETY: The builder arg is not None, or a new one was initialised.
-			.unwrap();
-
+		let builder = builder.unwrap_or(&mut temp_builder);
 		let repo = builder.clone(url, &dir)?;
 
 		Ok(Bucket { dir, repo })
 	}
 
 	/// Returns the bucket directory.
+	#[must_use]
 	pub fn dir(&self) -> &Path {
 		&self.dir
 	}
 
 	/// Returns the bucket name.
+	#[must_use]
 	pub fn name(&self) -> String {
-		let name = self.dir().file_name().map(|o| o.to_str().unwrap());
+		// The file name is None if the directory is '..', which results in an empty string here.
+		let name = self.dir().file_name().unwrap_or_default();
 
-		// File name is None only if the directory is '..'.
-		name.unwrap_or("").to_owned()
+		name.to_string_lossy().into_owned()
 	}
 
 	/// Returns the bucket URL, i.e., where it was cloned from.
+	///
+	/// # Errors
+	///
+	/// If the bucket does not have a origin, [`Error::Git`] is returned.
 	pub fn url(&self) -> Result<String> {
 		Ok(self.origin()?.url().unwrap_or("").to_owned())
 	}
@@ -141,6 +148,10 @@ impl Bucket {
 	}
 
 	/// Returns the last commit in the bucket.
+	///
+	/// # Errors
+	///
+	/// If the bucket does not have a HEAD or HEAD commit, [`Error::Git`] is returned.
 	pub fn commit(&self) -> Result<git2::Commit> {
 		let head = self.repo.head()?;
 		let commit = head.peel_to_commit()?;
@@ -153,6 +164,10 @@ impl Bucket {
 	/// # Arguments
 	///
 	/// * `since` - The commit ID to yield until.
+	///
+	/// # Errors
+	///
+	/// If the Git revwalk failed, [`Error::Git`] is returned.
 	pub fn commits(&self, since: git2::Oid) -> Result<Commits<'_>> {
 		Commits::new(&self.repo, since)
 	}
@@ -162,6 +177,10 @@ impl Bucket {
 	/// # Arguments
 	///
 	/// `predicate` - A predicate function that determines if a manifest should be yielded.
+	///
+	/// # Errors
+	///
+	/// If the bucket directory cannot be read, [`Error::Io`] is returned.
 	pub fn search<P>(&self, predicate: P) -> Result<Search<P>>
 	where
 		P: Fn(&str) -> bool,
@@ -173,13 +192,18 @@ impl Bucket {
 
 	/// Parses and yields each manifest in the bucket as (name, manifest).
 	/// This is a convenience function over `Self::search`.
+	///
+	/// # Errors
+	///
+	/// If the bucket directory cannot be read, [`Error::Io`] is returned.
 	pub fn manifests(&self) -> Result<Manifests> {
 		self.search(|_| true)
 	}
 
 	/// Returns the path to an manifest.
+	#[must_use]
 	pub fn manifest_path(&self, name: &str) -> PathBuf {
-		self.dir().join(format!(r"bucket\{}.json", name))
+		self.dir().join(format!(r"bucket\{name}.json"))
 	}
 
 	/// Parses and returns an manifest.
@@ -198,8 +222,12 @@ impl Bucket {
 	}
 
 	/// Returns the last commit made to a manifest.
-	///
 	/// If the manifest has not been commited, None is returned.
+	///
+	/// # Errors
+	///
+	/// If the status of the manifest file cannot be read, or the revwalk failed, [`Error::Git`] is returned.
+	#[allow(clippy::missing_panics_doc)]
 	pub fn manifest_commit(&self, name: &str) -> Result<Option<git2::Commit>> {
 		let path = self.manifest_path(name);
 
@@ -209,7 +237,9 @@ impl Bucket {
 		}
 
 		// SAFETY: path is always a child of dir.
-		let relpath = path.strip_prefix(&self.dir).unwrap();
+		let relpath = path
+			.strip_prefix(&self.dir)
+			.expect("manifest path is in bucket");
 
 		// Ensure the manifest is commited.
 		if self.is_commited(relpath)? {
@@ -265,23 +295,36 @@ impl Bucket {
 	///
 	/// `fetch_options` - The options to use for fetching changes.
 	/// `checkout_builder` - The builder to use for checking out changes.
+	///
+	/// # Errors
+	///
+	/// [`Error::Git`] is returned when any of these occur:
+	/// * The HEAD branch cannot be retrieved.
+	/// * The bucket does not have an origin.
+	/// * Fetching changes from the origin failed.
+	/// * Fast-forwarding failed.
+	///
+	/// # Panics
+	///
+	/// This function panics if the HEAD branch has a non-UTF-8 name.
 	pub fn pull(
 		&mut self,
 		fetch_options: Option<&mut git2::FetchOptions>,
 		checkout_builder: Option<&mut build::CheckoutBuilder>,
 	) -> Result<()> {
-		// Get the HEAD branch.
-		let branch = self.repo.head()?.name().unwrap().to_owned();
+		// Get the name of the HEAD branch.
+		let head = self.repo.head()?;
+		let branch = head.name().unwrap();
 
 		// Get the origin remote.
 		// TODO: Don't hardcode?
 		let mut origin = self.origin()?;
 
 		// Fetch updates for the HEAD branch from the origin.
-		let new_head = self.fetch(&[&branch], &mut origin, fetch_options)?;
+		let new_head = self.fetch(&[branch], &mut origin, fetch_options)?;
 
 		// Attempt to fast-forward changes.
-		self.fast_forward(&branch, &new_head, checkout_builder)?;
+		self.fast_forward(branch, &new_head, checkout_builder)?;
 
 		Ok(())
 	}
@@ -389,13 +432,13 @@ impl<'c> Iterator for Commits<'c> {
 		// Get the next OID.
 		let oid = self.revwalk.next()?.ok()?;
 
-		if oid != self.since {
+		if oid == self.since {
+			// The `since` commit has been reached.
+			None
+		} else {
 			// Return the commit.
 			// NOTE: Since the OID was retreived through revwalk, this should not be None.
 			self.repo.find_commit(oid).ok()
-		} else {
-			// The `since` commit has been reached.
-			None
 		}
 	}
 }
@@ -545,11 +588,16 @@ impl Buckets {
 	}
 
 	/// Yields all buckets.
+	///
+	/// # Errors
+	///
+	/// If the directory containing the buckets cannot be read, [`Error::Io`] is returned.
 	pub fn iter(&self) -> Result<Iter> {
 		Iter::new(self.dir.clone())
 	}
 
 	/// Returns the path to a bucket.
+	#[must_use]
 	pub fn path(&self, name: &str) -> PathBuf {
 		self.dir.join(name)
 	}
@@ -593,12 +641,12 @@ impl Buckets {
 	) -> Result<Bucket> {
 		let dir = self.path(name);
 
-		if !dir.try_exists()? {
+		if dir.try_exists()? {
+			Err(Error::Exists)
+		} else {
 			let dir = self.dir.join(name);
 
 			Bucket::clone(url, dir, builder)
-		} else {
-			Err(Error::Exists)
 		}
 	}
 
@@ -623,12 +671,16 @@ impl Buckets {
 		}
 	}
 
-	/// Parses and yields each manifest in all buckets where filter(bucket) and predicate(manifest_name) returns true.
+	/// Parses and yields each manifest in all buckets where `filter(bucket)` and `predicate(manifest_name)` returns true.
 	///
 	/// # Arguments
 	///
 	/// * `filter` - A filter function that determins if the bucket should be searched.
 	/// * `predicate` - A predicate function that determines if the manifest should be yielded.
+	///
+	/// # Errors
+	///
+	/// If the directory containing the buckets or any bucket directory cannot be read, [`Error::Io`] is returned.
 	pub fn search_all<F, P>(&self, filter: F, predicate: P) -> Result<SearchAll<P>>
 	where
 		F: Fn(&Bucket) -> bool,
@@ -642,7 +694,13 @@ impl Buckets {
 	}
 
 	/// Parses and yields each manifest in all buckets.
-	/// This is a convenience function over `Self::search`.
+	/// This is a convenience function over [`search_all`].
+	///
+	/// [`search_all`]: Buckets::search_all
+	///
+	/// # Errors
+	///
+	/// If the directory containing the buckets or any bucket directory cannot be read, [`Error::Io`] is returned.
 	pub fn manifests(&self) -> Result<AllManifests> {
 		self.search_all(|_| true, |_| true)
 	}
@@ -651,7 +709,11 @@ impl Buckets {
 	///
 	/// # Arguments
 	///
-	/// * `name`- The name of the manifest.
+	/// * `name` - The name of the manifest.
+	///
+	/// # Errors
+	///
+	/// If the directory containing the buckets or any bucket directory cannot be read, [`Error::Io`] is returned.
 	pub fn manifest(&self, name: &str) -> Result<(Rc<Bucket>, SearchItem)> {
 		let mut search = self.search_all(|_| true, |manifest_name| manifest_name == name)?;
 

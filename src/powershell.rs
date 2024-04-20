@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::Display;
+use std::hash::BuildHasher;
 use std::io;
 use std::io::prelude::*;
 use std::path::Path;
@@ -13,6 +14,7 @@ use crate::json;
 /// Returns the path to the newest PowerShell executable available,
 /// either PowerShell Core (pwsh.exe, v6+) if it's installed,
 /// or PowerShell (powershell.exe, v5.1-) which is in-built on Windows.
+#[allow(clippy::missing_panics_doc)]
 pub fn executable() -> &'static PathBuf {
 	static EXECUTABLE: OnceLock<PathBuf> = OnceLock::new();
 
@@ -76,6 +78,10 @@ impl Expression {
 	/// # Arguments
 	///
 	/// `value` - The value to convert.
+	///
+	/// # Errors
+	///
+	/// If the value cannot be converted to JSON, [`Error::Json`] is returned.
 	pub fn object<T>(value: &T) -> Result<Self, json::Error>
 	where
 		T: serde::Serialize,
@@ -83,7 +89,7 @@ impl Expression {
 		let value = json::to_string(value)?;
 
 		// TODO: Is there a more efficient way of passing the object to PowerShell?
-		Ok(Self::Raw(format!("{} | ConvertTo-Json", value)))
+		Ok(Self::Raw(format!("{value} | ConvertTo-Json")))
 	}
 }
 
@@ -99,7 +105,7 @@ impl Display for Expression {
 				write!(f, "\"{}\"", str.replace('"', "`\""))
 			}
 			Raw(str) => {
-				write!(f, "{}", str)
+				write!(f, "{str}")
 			}
 			Bool(bool) => {
 				write!(f, "{}", if *bool { "$true" } else { "$false" })
@@ -169,7 +175,7 @@ impl Powershell {
 	///
 	/// * `name`: The variable name.
 	/// * `expr`: The variable expression.
-	pub fn var<S>(&mut self, name: S, expr: Expression) -> &mut Self
+	pub fn var<S>(&mut self, name: S, expr: &Expression) -> &mut Self
 	where
 		S: Into<String>,
 	{
@@ -187,7 +193,7 @@ impl Powershell {
 		S: Into<String>,
 	{
 		for (name, expr) in vars {
-			self.var(name, expr);
+			self.var(name, &expr);
 		}
 
 		self
@@ -198,6 +204,11 @@ impl Powershell {
 	/// # Arguments
 	///
 	/// * `reader` - The reader to read the script from.
+	///
+	/// # Errors
+	///
+	/// If the PowerShell process cannot be spawned or waiting for its output failed, the IO error is returned.
+	#[allow(clippy::missing_panics_doc)]
 	pub fn execute<R>(&self, reader: &mut R) -> io::Result<Output>
 	where
 		R: Read,
@@ -226,6 +237,12 @@ impl Powershell {
 	/// # Arguments
 	///
 	/// * `script` - The PowerShell script to run.
+	///
+	/// # Errors
+	///
+	/// See [`execute`].
+	///
+	/// [`execute`]: Powershell::execute
 	pub fn run<S>(&self, script: S) -> io::Result<Output>
 	where
 		S: AsRef<str>,
@@ -285,7 +302,7 @@ where
 macro_rules! impl_lookup_hashmap {
 	($($type:ty),+ $(,)?) => {
 		$(
-			impl<'a, T> Lookup for &'a HashMap<$type, T>
+			impl<'a, T, S: BuildHasher> Lookup for &'a HashMap<$type, T, S>
 			where
 				&'a T: AsRef<str>,
 			{
@@ -311,15 +328,16 @@ where
 	fn replace_append(&mut self, caps: &regex::Captures<'_>, dst: &mut String) {
 		let (raw, [var]) = caps.extract();
 
-		// If the variable is not escaped (`$...):
-		if !raw.starts_with('`') {
-			// Push the variable's value to the buffer if it exists.
+		// If the variable is escaped (`$...):
+		if raw.starts_with('`') {
+			// Push the escaped variable back.
+			dst.push_str(raw);
+		} else {
+			// Push the variable's value to the buffer if it exists, otherwise leave it blank.
+			// This is consistent with PowerShell's behaviour.
 			if let Some(value) = self.0.lookup(var) {
 				dst.push_str(value.as_ref());
 			}
-		} else {
-			// Push the escaped variable back.
-			dst.push_str(raw)
 		}
 	}
 }

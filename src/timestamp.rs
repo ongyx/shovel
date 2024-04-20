@@ -15,7 +15,7 @@ impl fmt::Display for Timestamp {
 			.with_timezone(&chrono::Local)
 			.format("%d/%m/%Y %H:%M:%S %P");
 
-		write!(f, "{}", timestamp)
+		write!(f, "{timestamp}")
 	}
 }
 

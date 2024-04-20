@@ -65,7 +65,7 @@ impl Run for ListCommand {
 
 		let apps: Vec<_> = shovel
 			.apps
-			.iter()?
+			.each()?
 			.map(|(name, app)| ListInfo::new(&name, app))
 			.filter_map(|info| {
 				// check the bucket and name.

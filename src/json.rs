@@ -14,6 +14,10 @@ pub type Error = serde_path_to_error::Error<serde_json::Error>;
 /// # Arguments
 ///
 /// * `reader` - The reader to deserialize from.
+///
+/// # Errors
+///
+/// Errors from `serde_path_to_error` are returned verbatim.
 pub fn from_reader<R, T>(reader: R) -> Result<T, Error>
 where
 	R: io::Read,
@@ -34,6 +38,10 @@ where
 ///
 /// * `writer` - The writer to serialize to.
 /// * `value` - The value to serialize.
+///
+/// # Errors
+///
+/// Errors from `serde_path_to_error` are returned verbatim.
 pub fn to_writer<W, T>(writer: W, value: &T) -> Result<(), Error>
 where
 	W: io::Write,
@@ -50,6 +58,14 @@ where
 /// # Arguments
 ///
 /// * `value` - The value to serialize.
+///
+/// # Errors
+///
+/// Errors from `serde_path_to_error` are returned verbatim.
+///
+/// # Panics
+///
+/// This function panics if the JSON produced is not valid UTF-8.
 pub fn to_string<T>(value: &T) -> Result<String, Error>
 where
 	T: serde::Serialize,

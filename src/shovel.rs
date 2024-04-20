@@ -8,6 +8,7 @@ use crate::error::Result;
 use crate::persist::Persist;
 
 /// A high-level interface to Shovel.
+#[allow(dead_code)]
 pub struct Shovel {
 	/// The app manager.
 	pub apps: Apps,
@@ -20,6 +21,8 @@ pub struct Shovel {
 
 	/// The data persistence manager.
 	pub persist: Persist,
+
+	config: Config,
 }
 
 impl Shovel {
@@ -28,6 +31,12 @@ impl Shovel {
 	/// # Arguments
 	///
 	/// * `config` - The config to use.
+	///
+	/// # Errors
+	///
+	/// If any config-related directory cannot be created, [`Error::Io`] is returned.
+	///
+	/// [`Error::Io`]: crate::error::Error::Io
 	pub fn new(config: Config) -> Result<Self> {
 		let install_dir = config.install_dir();
 		let app_dir = config.app_dir();
@@ -51,6 +60,7 @@ impl Shovel {
 			buckets: Buckets::new(bucket_dir),
 			cache: Cache::new(cache_dir),
 			persist: Persist::new(persist_dir),
+			config,
 		})
 	}
 }

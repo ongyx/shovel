@@ -99,7 +99,7 @@ impl Context<'_> {
 
 		self.non_path_vars(&mut powershell)?;
 		self.path_vars(&mut powershell);
-		self.functions(&mut powershell);
+		Self::functions(&mut powershell);
 
 		Ok(powershell)
 	}
@@ -164,7 +164,7 @@ impl Context<'_> {
 		]);
 	}
 
-	fn functions(&self, powershell: &mut Powershell) {
+	fn functions(powershell: &mut Powershell) {
 		powershell.prelude(
 			r#"	
 			function basedir($global) { if($global) { return $globaldir } $scoopdir }
@@ -192,6 +192,10 @@ impl<'h> Hook<'h> {
 	/// # Arguments
 	///
 	/// * `context` - The hook context.
+	///
+	/// # Errors
+	///
+	/// If the manifest cannot be serialized as JSON to pass to PowerShell, [`Error::Json`] is returned.
 	pub fn new(context: Context<'h>) -> Result<Self> {
 		let powershell = context.powershell()?;
 
@@ -228,16 +232,16 @@ impl<'h> Hook<'h> {
 		.unwrap_or_default()
 		.join("\r\n");
 
-		if !hook.is_empty() {
+		if hook.is_empty() {
+			Ok(None)
+		} else {
 			let output = self.powershell.run(hook)?;
 
-			if !output.status.success() {
-				Err(Error::Failure { script, output })
-			} else {
+			if output.status.success() {
 				Ok(Some(output))
+			} else {
+				Err(Error::Failure { script, output })
 			}
-		} else {
-			Ok(None)
 		}
 	}
 }
@@ -261,7 +265,7 @@ mod tests {
 				},
 				..Default::default()
 			},
-			config: &Default::default(),
+			config: &Config::default(),
 			arch: Arch::X86_64,
 			command: Command::Install,
 		};
@@ -287,7 +291,7 @@ mod tests {
 				},
 				..Default::default()
 			},
-			config: &Default::default(),
+			config: &Config::default(),
 			arch: Arch::X86_64,
 			command: Command::Install,
 		};

@@ -82,11 +82,16 @@ impl App {
 	}
 
 	/// Returns the app directory.
+	#[must_use]
 	pub fn dir(&self) -> &Path {
 		&self.dir
 	}
 
 	/// Returns the last modified time of the app as a UNIX timestamp.
+	///
+	/// # Errors
+	///
+	/// If the app directory's metadata cannot be accessed, [`Error::Io`] is returned.
 	pub fn timestamp(&self) -> Result<Timestamp> {
 		let timestamp = util::mod_time(self.dir())?;
 
@@ -94,6 +99,7 @@ impl App {
 	}
 
 	/// Returns the path to the app's manifest, or None if it does not exist.
+	#[must_use]
 	pub fn manifest_path(&self) -> PathBuf {
 		self.dir().join("manifest.json")
 	}
@@ -115,6 +121,7 @@ impl App {
 	}
 
 	/// Returns the path to the app's metadata.
+	#[must_use]
 	pub fn metadata_path(&self) -> PathBuf {
 		self.dir().join("install.json")
 	}
@@ -245,11 +252,19 @@ impl Apps {
 	}
 
 	/// Yields the current version of each app.
-	pub fn iter(&self) -> Result<Iter> {
+	///
+	/// # Errors
+	///
+	/// If the apps directory cannot be read, [`Error::Io`] is returned.
+	pub fn each(&self) -> Result<Iter> {
 		Iter::new(self.dir.clone())
 	}
 
 	/// Yields the installed versions for an app. This does not include 'current'.
+	///
+	/// # Errors
+	///
+	/// If the app directory cannot be read, [`Error::Io`] is returned.
 	pub fn versions(&self, name: &str) -> Result<Versions> {
 		let dir = self.dir.join(name);
 
@@ -262,8 +277,9 @@ impl Apps {
 	///
 	/// * `name` - The name of the app.
 	/// * `version` - The version of the app.
+	#[must_use]
 	pub fn path(&self, name: &str, version: &str) -> PathBuf {
-		let mut dir = self.dir.to_owned();
+		let mut dir = self.dir.clone();
 		dir.extend([name, version]);
 
 		dir
@@ -274,6 +290,7 @@ impl Apps {
 	/// # Arguments
 	///
 	/// * `name` - The name of the app.
+	#[must_use]
 	pub fn current_path(&self, name: &str) -> PathBuf {
 		self.path(name, CURRENT)
 	}
@@ -302,7 +319,13 @@ impl Apps {
 	}
 
 	/// Opens and returns an app's current version.
-	/// This is a convenience function for `get(name, "current")`.
+	/// This is a convenience function for [`get(name, "current")`].
+	///
+	/// [`get(name, "current")`]: Self::open
+	///
+	/// # Errors
+	///
+	/// If the current version does not exist, [`Error::NotFound`] is returned.
 	pub fn open_current(&self, name: &str) -> Result<App> {
 		self.open(name, CURRENT)
 	}

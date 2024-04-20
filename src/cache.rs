@@ -143,6 +143,7 @@ impl Cache {
 	/// * `name` - The app's name.
 	/// * `version` - The app's version.
 	/// * `url` - The app's URL.
+	#[must_use]
 	pub fn path(&self, key: &Key) -> PathBuf {
 		self.dir.join(key.to_string())
 	}
@@ -152,6 +153,10 @@ impl Cache {
 	/// # Arguments
 	///
 	/// * `key`: The key to check.
+	///
+	/// # Errors
+	///
+	/// If the cached file cannot be read, [`Error::Io`] is returned.
 	pub fn exists(&self, key: &Key) -> Result<bool> {
 		let exists = self.path(key).try_exists()?;
 
@@ -159,11 +164,19 @@ impl Cache {
 	}
 
 	/// Yields the keys inside the cache.
+	///
+	/// # Errors
+	///
+	/// If the cache directory cannot be read, [`Error::Io`] is returned.
 	pub fn iter(&self) -> Result<Iter> {
 		Iter::new(&self.dir)
 	}
 
 	/// Returns statistics on the cache.
+	///
+	/// # Errors
+	///
+	/// If the cache directory or any cached file cannot be read, [`Error::Io`] is returned.
 	pub fn stat(&self) -> Result<Stat> {
 		let lengths: io::Result<Vec<_>> = self
 			.iter()?
@@ -190,6 +203,12 @@ impl Cache {
 	/// * `client`: The HTTP client to use.
 	/// * `key`: The key to add.
 	/// * `progress`: A closure to track download progress for the key. Takes (key, current, total) where current and total are in bytes.
+	///
+	/// # Errors
+	///
+	/// [`Error::Io`] is returned if the cached file cannot be read, created, or written to.
+	///
+	/// [`Error::Reqwest`] is returned if the URL cannot be downloaded.
 	pub async fn add<P>(
 		&self,
 		client: reqwest::Client,
@@ -209,11 +228,11 @@ impl Cache {
 		let resp = client.get(&key.url).send().await?;
 
 		let mut current = 0u64;
-		let total = resp.content_length().unwrap();
+		let total = resp.content_length();
 
 		let mut stream = resp.bytes_stream();
 
-		let mut file = fs::File::open(&path)?;
+		let mut file = fs::File::create(&path)?;
 
 		while let Some(chunk) = stream.next().await {
 			let chunk = chunk?;
@@ -222,8 +241,10 @@ impl Cache {
 
 			current += chunk.len() as u64;
 
-			if let Some(ref progress) = progress {
-				progress(&key, current, total);
+			if let Some(total) = total {
+				if let Some(ref progress) = progress {
+					progress(&key, current, total);
+				}
 			}
 		}
 
@@ -237,6 +258,12 @@ impl Cache {
 	/// * `client` - The HTTP client to use.
 	/// * `keys` - An iterator over keys to add.
 	/// * `progress`: A closure to track download progress for each key. Takes (key, current, total) where current and total are in bytes.
+	///
+	/// # Errors
+	///
+	/// See [`add`].
+	///
+	/// [`add`]: Cache::add
 	pub async fn add_multiple<I, P>(
 		&self,
 		client: reqwest::Client,
@@ -261,11 +288,14 @@ impl Cache {
 	/// # Arguments
 	///
 	/// * `app` - The app's name.
+	///
+	/// # Errors
+	///
+	/// If any cached file cannot be read, [`Error::Io`] is returned.
 	pub fn remove(&self, app: &str) -> Result<()> {
 		for entry in fs::read_dir(&self.dir)? {
 			let path = entry?.path();
-			// SAFETY: Entries should never end in '..'.
-			let name = path.file_name().unwrap().to_str().unwrap();
+			let name = path.file_name().unwrap_or_default().to_string_lossy();
 
 			if name.split('#').next() == Some(app) {
 				fs::remove_file(&path)?;
@@ -276,9 +306,13 @@ impl Cache {
 	}
 
 	/// Removes all cached files.
+	///
+	/// # Errors
+	///
+	/// If any cached file cannot be read, [`Error::Io`] is returned.
 	pub fn remove_all(&self) -> io::Result<()> {
 		// Remove the directory and create it again.
-		fs::remove_dir_all(&self.dir).and_then(|_| fs::create_dir(&self.dir))?;
+		fs::remove_dir_all(&self.dir).and_then(|()| fs::create_dir(&self.dir))?;
 
 		Ok(())
 	}

@@ -17,6 +17,7 @@ macro_rules! getter {
     ($inner:ident { $($name:ident: $type:ty),* $(,)? }) => {
         $(
             /// Returns the architecture-specific or common value for the field in that order.
+			#[must_use]
 			#[inline]
             pub fn $name(&self, arch: Arch) -> Option<&$type> {
             	self.$inner
@@ -34,6 +35,7 @@ macro_rules! list_getter {
     ($inner:ident { $($name:ident: $type:ty),* $(,)? }) => {
         $(
             /// Returns the architecture-specific or common list as a slice for the field in that order.
+			#[must_use]
 			#[inline]
             pub fn $name(&self, arch: Arch) -> Option<&[$type]> {
             	self.$inner
@@ -161,10 +163,10 @@ impl Default for License {
 impl fmt::Display for License {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match self {
-			Self::Simple(id) => write!(f, "{}", id),
+			Self::Simple(id) => write!(f, "{id}"),
 			Self::Extended { identifier, url } => {
 				if let (Some(identifier), Some(url)) = (identifier, url) {
-					write!(f, "{} ({})", identifier, url)
+					write!(f, "{identifier} ({url})")
 				} else {
 					let identifier = identifier.as_deref();
 					let url = url.as_deref();
@@ -300,7 +302,7 @@ impl fmt::Display for Shortcut {
 
 		// Despite the name, this is a String and not a Vec.
 		if let Some(args) = self.arguments.as_deref() {
-			write!(f, " {}", args)?;
+			write!(f, " {args}")?;
 		}
 
 		Ok(())
@@ -333,8 +335,8 @@ impl From<Shortcut> for Vec<String> {
 
 		if let Some(icon) = shortcut.icon {
 			// Ensure parameters are specified as empty.
-			vec.resize(3, "".to_owned());
-			vec.push(icon)
+			vec.resize_with(3, Default::default);
+			vec.push(icon);
 		}
 
 		vec
@@ -385,7 +387,7 @@ impl fmt::Display for Shim {
 		let mut cmd = vec![self.executable.as_str()];
 
 		// Add the arguments to the command.
-		let args = self.arguments.iter().map(|arg| arg.as_str());
+		let args = self.arguments.iter().map(String::as_str);
 		cmd.extend(args);
 
 		write!(f, "{}", cmd.join(" "))
@@ -406,8 +408,8 @@ json_enum! {
 impl fmt::Display for Bin {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match self {
-			Self::Path(path) => write!(f, "{}", path),
-			Self::Shim(shim) => write!(f, "{}", shim),
+			Self::Path(path) => write!(f, "{path}"),
+			Self::Shim(shim) => write!(f, "{shim}"),
 		}
 	}
 }
@@ -431,9 +433,9 @@ impl fmt::Display for Bins {
 		use Bins::*;
 
 		match self {
-			One(bin) => write!(f, "{}", bin),
+			One(bin) => write!(f, "{bin}"),
 			Many(bins) => {
-				let bins: Vec<String> = bins.iter().map(|bin| bin.to_string()).collect();
+				let bins: Vec<String> = bins.iter().map(ToString::to_string).collect();
 
 				write!(f, "{}", bins.join(" | "))
 			}
@@ -534,6 +536,7 @@ impl Arch {
 	/// # Panics
 	///
 	/// This function panics if the target architecture is not one of (`x86`, `x86_64`, `aarch64`).
+	#[must_use]
 	pub fn native() -> Self {
 		if cfg!(target_arch = "x86") {
 			Self::X86
@@ -823,6 +826,7 @@ impl Manifest {
 	}
 
 	/// Returns the architecture compatible with the manifest.
+	#[must_use]
 	pub fn compatible(&self) -> Arch {
 		for arch in Arch::compatible() {
 			if self.url(*arch).is_some() {
@@ -834,26 +838,35 @@ impl Manifest {
 	}
 
 	/// Returns the installer script, if any.
+	#[must_use]
 	pub fn installer_script(&self, arch: Arch) -> Option<&[String]> {
 		self.installer(arch).and_then(|i| i.script.as_deref())
 	}
 
 	/// Returns the uninstaller script, if any.
+	#[must_use]
 	pub fn uninstaller_script(&self, arch: Arch) -> Option<&[String]> {
 		self.uninstaller(arch).and_then(|i| i.script.as_deref())
 	}
 
 	/// Checks if the manifest's version is nightly.
+	#[must_use]
 	pub fn is_nightly(&self) -> bool {
 		self.version == "nightly"
 	}
 
 	/// Checks if the manifest's fields are valid.
 	///
-	/// The following checks are done:
-	/// * `version` contains only alphanumeric characters or `['.', '-', '+']`.
-	/// * `url` is not None for any architecture (`architecture.<arch>.url`), or the common field (`common.url`) is not None.
-	/// * `url` contains valid URLs with at least one path segment (`https://example.text/file.txt`) or a fragment starting with '/' (`https://example.text/file.txt#/renamed.txt`).
+	/// # Errors
+	///
+	/// [`Error::InvalidVersion`] is returned if `version` contains characters not in the set `['a-z', 'A-Z', '0-9', '.', '-', '+']`.
+	///
+	/// [`Error::UrlsNotFound`] is returned if `url` is None for any architecture (`architecture.<arch>.url`),
+	/// or the common field (`common.url`) is None.
+	///
+	/// [`Error::InvalidUrls`] is returned if `url` contains invalid URLs.
+	/// URLs must have at least one path segment (`https://example.text/file.txt`)
+	/// or a fragment starting with '/' (`https://example.text/file.txt#/renamed.txt`).
 	pub fn validate(&self) -> Result<()> {
 		use Error::*;
 
@@ -994,14 +1007,14 @@ mod tests {
 			name: "hx".to_owned(),
 			arguments: vec!["--config", r"~\scoop\persist\helix\config.toml"]
 				.into_iter()
-				.map(|s| s.to_owned())
+				.map(ToOwned::to_owned)
 				.collect(),
 		};
 
 		assert_eq!(
 			to_string(&shim_with_args).unwrap(),
 			r#"["helix.exe","hx","--config","~\\scoop\\persist\\helix\\config.toml"]"#
-		)
+		);
 	}
 
 	#[test]
