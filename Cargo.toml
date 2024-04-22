@@ -62,3 +62,7 @@ iter_not_returning_iterator = "allow"
 
 # phf_codegen keys may be too long.
 unreadable_literal = "allow"
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
