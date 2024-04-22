@@ -1,9 +1,5 @@
-//! A package manager for Windows, based off of [Scoop].
-//!
-//! This library exposes Scoop functions independently of the command-line interface.
+//! The Shovel package manager as a library.
 //! Documentation and API stability are on a best-effort basis.
-//!
-//! [Scoop]: https://github.com/ScoopInstaller/Scoop
 
 pub mod app;
 pub mod bucket;

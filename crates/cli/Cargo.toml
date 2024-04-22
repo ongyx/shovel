@@ -1,11 +1,7 @@
 [package]
 name = "shovel-cli"
 version = "0.1.0"
-description = """
-A package manager for Windows, based off of Scoop.
-
-This binary crate provides a command-line interface for users.
-"""
+description = "A package manager for Windows, based off of Scoop."
 
 authors.workspace = true
 edition.workspace = true
