@@ -62,7 +62,7 @@ impl Run for NecoCommand {
 	fn run(&self, _: &mut shovel::Shovel) -> eyre::Result<()> {
 		let neco_arc = Neco(Arc::new(self.message.as_deref().unwrap_or("bure nyuu")));
 
-		println!("{}", neco_arc);
+		println!("{neco_arc}");
 
 		Ok(())
 	}

@@ -35,9 +35,9 @@ fn main() -> eyre::Result<()> {
 
 			// Read the config file.
 			json::from_reader(config_file)
-				.wrap_err_with(|| format!("Failed to parse config file {}", config_path))?
+				.wrap_err_with(|| format!("Failed to parse config file {config_path}"))?
 		}
-		None => Default::default(),
+		None => shovel::Config::default(),
 	};
 
 	let mut shovel = shovel::Shovel::new(config)?;

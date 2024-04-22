@@ -38,3 +38,6 @@ shovel = { version = "0.5.1", path = "../shovel" }
 [build-dependencies]
 phf_codegen.workspace = true
 serde_json.workspace = true
+
+[lints]
+workspace = true

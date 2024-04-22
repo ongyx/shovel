@@ -79,13 +79,12 @@ impl Run for ListCommand {
 			})
 			.collect();
 
-		match apps.len() {
-			0 => eyre::bail!("No app(s) found."),
-			_ => {
-				println!("\n{}\n", util::tableify(apps, false));
-
-				Ok(())
-			}
+		if apps.is_empty() {
+			eyre::bail!("No app(s) found.")
 		}
+
+		println!("\n{}\n", util::tableify(apps, false));
+
+		Ok(())
 	}
 }

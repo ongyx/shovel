@@ -46,7 +46,7 @@ pub struct VerifyCommand {
 }
 
 impl VerifyCommand {
-	fn validate(&self, name: &str, bucket: &shovel::Bucket) -> eyre::Result<Verified> {
+	fn validate(name: &str, bucket: &shovel::Bucket) -> eyre::Result<Verified> {
 		use Verified::*;
 
 		let path = bucket.manifest_path(name);
@@ -62,7 +62,7 @@ impl VerifyCommand {
 				error: eyre::eyre!("Failed to validate against JSON Schema"),
 				schema_errors: format_schema_errors(errs),
 			},
-			|_| Success,
+			|()| Success,
 		);
 
 		Ok(verified)
@@ -76,14 +76,14 @@ impl VerifyCommand {
 
 		let name = bucket.name();
 		let verified = bucket.manifests()?.map(move |item| {
-			let manifest = item.manifest.map(|m| m.validate().map(|_| m));
+			let manifest = item.manifest.map(|m| m.validate().map(|()| m));
 
 			// Check if the manifest parsed successfully.
 			let verified = match manifest {
 				Ok(_) => {
 					// Only verify against the schema if successfully parsed.
 					if self.schema {
-						self.validate(&item.name, bucket)?
+						Self::validate(&item.name, bucket)?
 					} else {
 						Success
 					}
@@ -153,7 +153,7 @@ impl Run for VerifyCommand {
 						println!("* {}: {}", name.bold(), error);
 
 						for schema_error in schema_errors {
-							println!("  * {}", schema_error);
+							println!("  * {schema_error}");
 						}
 					}
 				}

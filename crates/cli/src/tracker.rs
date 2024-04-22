@@ -59,7 +59,7 @@ impl Tracker {
 				if delta_id.is_none() {
 					delta_id = self
 						.sender
-						.bar(total_deltas, format!("{}: Resolving deltas", self.repo))
+						.bar(total_deltas, format!("{}: Resolving deltas", self.repo));
 				}
 
 				self.sender.set(delta_id.unwrap(), deltas).unwrap();

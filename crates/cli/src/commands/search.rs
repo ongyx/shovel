@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use eyre::WrapErr;
 use shovel::bucket;
 
@@ -16,14 +14,14 @@ struct SearchInfo {
 }
 
 impl SearchInfo {
-	fn new(bucket: Rc<bucket::Bucket>, item: bucket::SearchItem) -> shovel::Result<Self> {
+	fn new(bucket: &bucket::Bucket, item: bucket::SearchItem) -> shovel::Result<Self> {
 		let manifest = item.manifest?;
 		let arch = manifest.compatible();
 
 		let version = manifest.version.clone();
 		let binaries = manifest
 			.bin(arch)
-			.map(|bins| bins.to_string())
+			.map(ToString::to_string)
 			.unwrap_or_default();
 
 		Ok(SearchInfo {
@@ -54,18 +52,17 @@ impl Run for SearchCommand {
 				|manifest_name| regex.is_match(manifest_name),
 			)
 			.wrap_err("Search failed")?
-			.map(|(bucket, item)| SearchInfo::new(bucket, item))
+			.map(|(bucket, item)| SearchInfo::new(&bucket, item))
 			.collect();
 
 		let apps = apps?;
 
-		match apps.len() {
-			0 => eyre::bail!("No app(s) found."),
-			_ => {
-				println!("\n{}\n", util::tableify(apps, false));
-
-				Ok(())
-			}
+		if apps.is_empty() {
+			eyre::bail!("No app(s) found.");
 		}
+
+		println!("\n{}\n", util::tableify(apps, false));
+
+		Ok(())
 	}
 }

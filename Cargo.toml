@@ -50,7 +50,15 @@ unsafe_code = "forbid"
 all = { level = "deny", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
 
-[profile.release]
-debug = true
-#lto = true
-#codegen-units = 1
+# False positives.
+doc_markdown = "allow"
+module_name_repetitions = "allow"
+
+# Enums may have many variants, so glob imports are less verbose.
+enum_glob_use = "allow"
+
+# Methods named .iter() may return a Result<Iter, ...>.
+iter_not_returning_iterator = "allow"
+
+# phf_codegen keys may be too long.
+unreadable_literal = "allow"

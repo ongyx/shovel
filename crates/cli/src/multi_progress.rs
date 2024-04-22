@@ -56,7 +56,7 @@ impl Sender {
 	}
 
 	fn send(&self, id: Id, update: Update) -> Option<Id> {
-		self.inner.send((id, update)).ok().map(|_| id)
+		self.inner.send((id, update)).ok().map(|()| id)
 	}
 }
 

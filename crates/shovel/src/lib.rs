@@ -5,13 +5,6 @@
 //!
 //! [Scoop]: https://github.com/ScoopInstaller/Scoop
 
-#![allow(
-	clippy::enum_glob_use,
-	clippy::doc_markdown,
-	clippy::module_name_repetitions,
-	clippy::iter_not_returning_iterator
-)]
-
 pub mod app;
 pub mod bucket;
 pub mod cache;

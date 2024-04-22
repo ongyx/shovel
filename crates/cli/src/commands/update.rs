@@ -8,7 +8,7 @@ use crate::util;
 
 fn update_bucket(
 	bucket: &mut shovel::Bucket,
-	tracker: tracker::Tracker,
+	tracker: &tracker::Tracker,
 ) -> eyre::Result<git2::Oid> {
 	let mut fo = tracker.fetch_options();
 	let mut cb = tracker.checkout_builder();
@@ -76,7 +76,7 @@ impl Run for UpdateCommand {
 						let tracker = tracker::Tracker::new(tx.clone(), bucket.name().as_str());
 
 						// Update the bucket and get the original HEAD.
-						let head = update_bucket(&mut bucket, tracker)?;
+						let head = update_bucket(&mut bucket, &tracker)?;
 
 						Ok((head, bucket))
 					},

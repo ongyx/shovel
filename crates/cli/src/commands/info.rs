@@ -57,16 +57,13 @@ impl Info {
 
 		let binaries = manifest
 			.bin(arch)
-			.map(|bins| bins.to_string())
+			.map(ToString::to_string)
 			.unwrap_or_default();
 
 		let shortcuts = manifest
 			.shortcuts(arch)
 			.map(|shortcuts| {
-				let shortcuts: Vec<_> = shortcuts
-					.iter()
-					.map(|shortcut| shortcut.to_string())
-					.collect();
+				let shortcuts: Vec<_> = shortcuts.iter().map(ToString::to_string).collect();
 
 				shortcuts.join(" | ")
 			})
@@ -100,7 +97,7 @@ impl Run for InfoCommand {
 
 		let table = util::tableify(iter::once(info), true);
 
-		println!("\n{}\n", table);
+		println!("\n{table}\n");
 
 		Ok(())
 	}

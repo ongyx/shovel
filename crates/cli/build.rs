@@ -20,7 +20,7 @@ fn main() {
 	for (bucket, url) in json {
 		let url = url.as_str().unwrap();
 
-		map.entry(bucket, &format!(r#""{}""#, url));
+		map.entry(bucket, &format!(r#""{url}""#));
 	}
 
 	let mut rs_path = env_as_path("OUT_DIR");
@@ -29,11 +29,10 @@ fn main() {
 	let mut rs_file = io::BufWriter::new(fs::File::create(rs_path).unwrap());
 
 	// Write the phf map to the Rust file.
-	writeln!(&mut rs_file, "use phf;").unwrap();
 	writeln!(&mut rs_file, "/// Map of known bucket names to their URLs.").unwrap();
 	writeln!(
 		&mut rs_file,
-		"/// Derived from https://github.com/ScoopInstaller/Scoop/blob/master/buckets.json"
+		"/// Derived from <https://github.com/ScoopInstaller/Scoop/blob/master/buckets.json>"
 	)
 	.unwrap();
 	writeln!(
