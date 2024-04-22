@@ -1,0 +1,40 @@
+[package]
+name = "shovel-cli"
+version = "0.1.0"
+description = """
+A package manager for Windows, based off of Scoop.
+
+This binary crate provides a command-line interface for users.
+"""
+
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "shovel"
+path = "src/main.rs"
+
+[dependencies]
+git2.workspace = true
+regex.workspace = true
+serde_json.workspace = true
+
+bytesize.workspace = true
+clap.workspace = true
+color-eyre.workspace = true
+eyre.workspace = true
+jsonschema.workspace = true
+linya.workspace = true
+owo-colors.workspace = true
+phf.workspace = true
+rayon.workspace = true
+tabled.workspace = true
+terminal_size.workspace = true
+
+shovel = { version = "0.5.1", path = "../shovel" }
+
+[build-dependencies]
+phf_codegen.workspace = true
+serde_json.workspace = true

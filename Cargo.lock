@@ -1774,14 +1774,34 @@ dependencies = [
 name = "shovel"
 version = "0.5.1"
 dependencies = [
- "bytesize",
  "chrono",
- "clap",
- "color-eyre",
- "eyre",
  "futures-util",
  "git2",
  "home",
+ "phf",
+ "regex",
+ "reqwest 0.12.2",
+ "serde",
+ "serde_json",
+ "serde_path_to_error",
+ "serde_with",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "url",
+ "which",
+ "windows-version",
+]
+
+[[package]]
+name = "shovel-cli"
+version = "0.1.0"
+dependencies = [
+ "bytesize",
+ "clap",
+ "color-eyre",
+ "eyre",
+ "git2",
  "jsonschema",
  "linya",
  "owo-colors",
@@ -1789,19 +1809,10 @@ dependencies = [
  "phf_codegen",
  "rayon",
  "regex",
- "reqwest 0.12.2",
- "serde",
  "serde_json",
- "serde_path_to_error",
- "serde_with",
+ "shovel",
  "tabled",
- "tempfile",
  "terminal_size 0.3.0",
- "thiserror",
- "tokio",
- "url",
- "which",
- "windows-version",
 ]
 
 [[package]]

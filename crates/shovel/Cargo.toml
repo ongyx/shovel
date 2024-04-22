@@ -1,0 +1,33 @@
+[package]
+name = "shovel"
+version = "0.5.1"
+description = """
+A package manager for Windows, based off of Scoop.
+
+This library crate exposes Scoop functions independently of the command-line interface.
+Documentation and API stability are on a best-effort basis.
+"""
+
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+chrono.workspace = true
+futures-util.workspace = true
+git2.workspace = true
+home.workspace = true
+phf.workspace = true
+regex.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_path_to_error.workspace = true
+serde_with.workspace = true
+thiserror.workspace = true
+tempfile.workspace = true
+tokio.workspace = true
+url.workspace = true
+windows-version.workspace = true
+which.workspace = true
