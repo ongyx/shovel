@@ -1785,6 +1785,7 @@ dependencies = [
  "serde_json",
  "serde_path_to_error",
  "serde_with",
+ "shovel-powershell",
  "tempfile",
  "thiserror",
  "tokio",
@@ -1813,6 +1814,16 @@ dependencies = [
  "shovel",
  "tabled",
  "terminal_size 0.3.0",
+]
+
+[[package]]
+name = "shovel-powershell"
+version = "0.1.0"
+dependencies = [
+ "regex",
+ "serde",
+ "serde_json",
+ "which",
 ]
 
 [[package]]

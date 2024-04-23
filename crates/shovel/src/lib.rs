@@ -10,7 +10,6 @@ pub mod hook;
 pub mod json;
 pub mod manifest;
 pub mod persist;
-pub mod powershell;
 pub mod shovel;
 pub mod timestamp;
 
@@ -28,6 +27,5 @@ pub use error::Error;
 pub use error::Result;
 pub use hook::Hook;
 pub use manifest::Manifest;
-pub use powershell::Powershell;
 pub use shovel::Shovel;
 pub use timestamp::Timestamp;

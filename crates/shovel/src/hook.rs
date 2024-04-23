@@ -5,14 +5,12 @@ use std::path::PathBuf;
 use std::sync::OnceLock;
 
 use crate::config;
-use crate::json;
 use crate::manifest::Arch;
-use crate::powershell::Expression;
-use crate::powershell::Output;
 use crate::util;
 use crate::Config;
 use crate::Manifest;
-use crate::Powershell;
+
+use powershell;
 
 fn home_dir() -> &'static Path {
 	static HOME_DIR: OnceLock<PathBuf> = OnceLock::new();
@@ -23,14 +21,17 @@ fn home_dir() -> &'static Path {
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
 	#[error("Failed to run hook {script:?} - got {output:?}")]
-	Failure { script: Script, output: Output },
+	Failure {
+		script: Script,
+		output: powershell::Output,
+	},
 
 	#[error("IO error encountered when running hook: {0}")]
 	Io(#[from] io::Error),
 
 	/// A JSON error.
 	#[error(transparent)]
-	Json(#[from] json::Error),
+	Json(#[from] serde_json::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -94,30 +95,30 @@ pub struct Context<'c> {
 }
 
 impl Context<'_> {
-	fn powershell(&self) -> Result<Powershell> {
-		let mut powershell = Powershell::default();
+	fn runner(&self) -> Result<powershell::Runner> {
+		let mut runner = powershell::Runner::default();
 
-		self.non_path_vars(&mut powershell)?;
-		self.path_vars(&mut powershell);
-		Self::functions(&mut powershell);
+		self.non_path_vars(&mut runner)?;
+		self.path_vars(&mut runner);
+		Self::functions(&mut runner);
 
-		Ok(powershell)
+		Ok(runner)
 	}
 
-	fn non_path_vars(&self, powershell: &mut Powershell) -> Result<()> {
-		use Expression::Raw;
+	fn non_path_vars(&self, runner: &mut powershell::Runner) -> Result<()> {
+		use powershell::Expression;
 
 		let app = self.app.to_owned();
 		// TODO: Pick architecture?
 		let arch = Arch::native().to_string();
 		let command = self.command.to_string();
 		// TODO: Read the actual scoop config?
-		let config = Raw("[PSCustomObject]{}".to_owned());
+		let config = Expression::Raw("[PSCustomObject]{}".to_owned());
 		let global = self.config.is_global();
 		let manifest = Expression::object(&self.manifest)?;
 		let version = self.manifest.version.clone();
 
-		powershell.vars([
+		runner.vars([
 			// Non-paths.
 			("app", app.into()),
 			("architecture", arch.into()),
@@ -131,7 +132,7 @@ impl Context<'_> {
 		Ok(())
 	}
 
-	fn path_vars(&self, powershell: &mut Powershell) {
+	fn path_vars(&self, runner: &mut powershell::Runner) {
 		let dir = util::path_to_string(
 			self.config
 				.app_dir()
@@ -148,7 +149,7 @@ impl Context<'_> {
 		let old_scoop_dir = util::path_to_string(home_dir().join(r"AppData\Local\Scoop"));
 		let scoop_dir = util::path_to_string(self.config.install_dir());
 
-		powershell.vars([
+		runner.vars([
 			// Important paths.
 			("dir", dir.into()),
 			("persist_dir", persist_dir.into()),
@@ -164,8 +165,8 @@ impl Context<'_> {
 		]);
 	}
 
-	fn functions(powershell: &mut Powershell) {
-		powershell.prelude(
+	fn functions(runner: &mut powershell::Runner) {
+		runner.prelude(
 			r#"	
 			function basedir($global) { if($global) { return $globaldir } $scoopdir }
 			function appsdir($global) { "$(basedir $global)\apps" }
@@ -183,7 +184,7 @@ impl Context<'_> {
 /// See https://github.com/ScoopInstaller/Scoop/wiki/Pre-Post-(un)install-scripts for details.
 pub struct Hook<'h> {
 	context: Context<'h>,
-	powershell: Powershell,
+	runner: powershell::Runner,
 }
 
 impl<'h> Hook<'h> {
@@ -197,11 +198,11 @@ impl<'h> Hook<'h> {
 	///
 	/// If the manifest cannot be serialized as JSON to pass to PowerShell, [`Error::Json`] is returned.
 	pub fn new(context: Context<'h>) -> Result<Self> {
-		let powershell = context.powershell()?;
+		let powershell = context.runner()?;
 
 		Ok(Self {
 			context,
-			powershell,
+			runner: powershell,
 		})
 	}
 
@@ -215,7 +216,7 @@ impl<'h> Hook<'h> {
 	/// # Errors
 	///
 	/// If the hook failed to run, `Error::Failure` is returned.
-	pub fn run(&self, script: Script) -> Result<Option<Output>> {
+	pub fn run(&self, script: Script) -> Result<Option<powershell::Output>> {
 		use Script::*;
 
 		let manifest = self.context.manifest;
@@ -235,7 +236,7 @@ impl<'h> Hook<'h> {
 		if hook.is_empty() {
 			Ok(None)
 		} else {
-			let output = self.powershell.run(hook)?;
+			let output = self.runner.run(hook)?;
 
 			if output.status.success() {
 				Ok(Some(output))

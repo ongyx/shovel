@@ -27,5 +27,7 @@ url.workspace = true
 windows-version.workspace = true
 which.workspace = true
 
+powershell = { version = "0.1.0", path = "../powershell", package = "shovel-powershell" }
+
 [lints]
 workspace = true

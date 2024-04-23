@@ -1,0 +1,18 @@
+[package]
+name = "shovel-powershell"
+version = "0.1.0"
+description = "A script runner for PowerShell (Windows-only)"
+
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+regex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+which.workspace = true
+
+[lints]
+workspace = true
