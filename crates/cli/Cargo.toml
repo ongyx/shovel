@@ -13,23 +13,22 @@ name = "shovel"
 path = "src/main.rs"
 
 [dependencies]
-git2.workspace = true
-regex.workspace = true
-serde_json.workspace = true
+shovel.workspace = true
 
 bytesize.workspace = true
 clap.workspace = true
 color-eyre.workspace = true
 eyre.workspace = true
+git2.workspace = true
 jsonschema.workspace = true
 linya.workspace = true
 owo-colors.workspace = true
 phf.workspace = true
 rayon.workspace = true
+regex.workspace = true
+serde_json.workspace = true
 tabled.workspace = true
 terminal_size.workspace = true
-
-shovel = { version = "0.5.1", path = "../shovel" }
 
 [build-dependencies]
 phf_codegen.workspace = true

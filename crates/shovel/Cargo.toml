@@ -9,6 +9,8 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+powershell.workspace = true
+
 chrono.workspace = true
 futures-util.workspace = true
 git2.workspace = true
@@ -26,8 +28,6 @@ tokio.workspace = true
 url.workspace = true
 windows-version.workspace = true
 which.workspace = true
-
-powershell = { version = "0.1.0", path = "../powershell", package = "shovel-powershell" }
 
 [lints]
 workspace = true

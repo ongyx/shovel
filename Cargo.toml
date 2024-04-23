@@ -1,5 +1,9 @@
 [workspace]
-members = ["crates/*"]
+members = [
+  "crates/cli",
+  "crates/powershell",
+  "crates/shovel",
+]
 resolver = "2"
 
 [workspace.package]
@@ -9,39 +13,39 @@ license = "MIT"
 rust-version = "1.76"
 
 [workspace.dependencies]
-# shovel
+# Internal crates.
+powershell = { version = "0.1.0", path = "crates/powershell", package = "shovel-powershell" }
+shovel = { version = "0.5.1", path = "crates/shovel" }
+
+# External crates.
+bytesize = "1.3.0"
 chrono = "0.4.35" 
+clap = { version = "4.5.1", features = ["derive"] }
+color-eyre = "0.6" 
+eyre = { version = "0.6", default-features = false, features = ["auto-install", "track-caller"] }
 futures-util = "0.3.30"
 git2 = "0.18.2"
 home = "0.5.9"
+jsonschema = "0.17.1" 
+linya = "0.3.0" 
+owo-colors = "3.5.0"
+phf = { version = "0.11.2", features = ["macros"] }
+phf_codegen = "0.11.2"
+rayon = "1.10.0"
 regex = "1.10.3"
 reqwest = { version = "0.12.2", features = ["stream"] }
 serde = { version = "1.0.197", features = ["derive"] }
 serde_json = { version = "1.0.114", features = ["preserve_order"] }
 serde_path_to_error = "0.1.16"
 serde_with = "3.6.1"
-thiserror = "1.0.57"
+tabled = { version = "0.15.0", features = ["ansi"] }
 tempfile = "3.10.1"
+terminal_size = "0.3.0"
+thiserror = "1.0.57"
 tokio = { version = "1", features = ["full"] }
 url = { version = "2.5.0", features = ["serde"] }
-windows-version = "0.1.0"
 which = "6.0.1"
-
-# shovel-cli
-bytesize = "1.3.0"
-clap = { version = "4.5.1", features = ["derive"] }
-color-eyre = "0.6" 
-eyre = { version = "0.6", default-features = false, features = ["auto-install", "track-caller"] }
-jsonschema = "0.17.1" 
-linya = "0.3.0" 
-owo-colors = "3.5.0"
-phf = { version = "0.11.2", features = ["macros"] }
-rayon = "1.10.0"
-tabled = { version = "0.15.0", features = ["ansi"] }
-terminal_size = "0.3.0"
-
-# shovel-cli (build-dependencies)
-phf_codegen = "0.11.2"
+windows-version = "0.1.0"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
