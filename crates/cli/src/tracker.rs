@@ -1,20 +1,31 @@
+use std::sync::OnceLock;
+
 use git2::build::CheckoutBuilder;
 use git2::build::RepoBuilder;
 use git2::FetchOptions;
 use git2::RemoteCallbacks;
 
-use crate::multi_progress;
+use indicatif::MultiProgress;
+use indicatif::ProgressBar;
+use indicatif::ProgressStyle;
+
+fn progress_style() -> &'static ProgressStyle {
+	static PROGRESS_STYLE: OnceLock<ProgressStyle> = OnceLock::new();
+
+	PROGRESS_STYLE
+		.get_or_init(|| ProgressStyle::with_template("{msg} {pos}/{len} {wide_bar}").unwrap())
+}
 
 #[derive(Clone)]
 pub struct Tracker {
-	sender: multi_progress::Sender,
+	multi_progress: MultiProgress,
 	repo: String,
 }
 
 impl Tracker {
-	pub fn new(sender: multi_progress::Sender, repo: &str) -> Self {
+	pub fn new(multi_progress: MultiProgress, repo: &str) -> Self {
 		Self {
-			sender,
+			multi_progress,
 			repo: repo.to_owned(),
 		}
 	}
@@ -23,46 +34,49 @@ impl Tracker {
 	pub fn remote_callbacks(&self) -> RemoteCallbacks<'_> {
 		let mut callbacks = RemoteCallbacks::new();
 
-		let mut receive_id = None;
-		let mut index_id = None;
-		let mut delta_id = None;
+		let mut recv_bar = None;
+		let mut index_bar = None;
+		let mut delta_bar = None;
 
 		// Register a callback for receiving remote objects.
 		callbacks.transfer_progress(move |stats| {
-			let total = stats.total_objects();
+			let total = stats.total_objects() as u64;
 
-			let received = stats.received_objects();
+			let received = stats.received_objects() as u64;
 			if received > 0 {
-				if receive_id.is_none() {
-					receive_id = self
-						.sender
-						.bar(total, format!("{}: Receiving objects", self.repo));
-				}
+				let recv_bar = recv_bar.get_or_insert_with(|| {
+					let bar = self.add_progress_bar(total);
 
-				self.sender.set(receive_id.unwrap(), received);
+					bar.set_message(format!("{}: Receiving objects", self.repo));
+					bar
+				});
+
+				recv_bar.set_position(received);
 			}
 
-			let indexed = stats.indexed_objects();
+			let indexed = stats.indexed_objects() as u64;
 			if indexed > 0 {
-				if index_id.is_none() {
-					index_id = self
-						.sender
-						.bar(total, format!("{}: Indexing objects", self.repo));
-				}
+				let index_bar = index_bar.get_or_insert_with(|| {
+					let bar = self.add_progress_bar(total);
 
-				self.sender.set(index_id.unwrap(), indexed).unwrap();
+					bar.set_message(format!("{}: Indexing objects", self.repo));
+					bar
+				});
+
+				index_bar.set_position(indexed);
 			}
 
-			let deltas = stats.indexed_deltas();
-			let total_deltas = stats.total_deltas();
+			let deltas = stats.indexed_deltas() as u64;
+			let total_deltas = stats.total_deltas() as u64;
 			if deltas > 0 {
-				if delta_id.is_none() {
-					delta_id = self
-						.sender
-						.bar(total_deltas, format!("{}: Resolving deltas", self.repo));
-				}
+				let delta_bar = delta_bar.get_or_insert_with(|| {
+					let bar = self.add_progress_bar(total_deltas);
 
-				self.sender.set(delta_id.unwrap(), deltas).unwrap();
+					bar.set_message(format!("{}: Resolving deltas", self.repo));
+					bar
+				});
+
+				delta_bar.set_position(deltas);
 			}
 
 			true
@@ -84,18 +98,19 @@ impl Tracker {
 	pub fn checkout_builder(&self) -> CheckoutBuilder<'_> {
 		let mut checkout = CheckoutBuilder::new();
 
-		let mut id = None;
+		let mut bar = None;
 
 		// Register a callback for checking out objects.
 		checkout.progress(move |_, current, total| {
 			if current > 0 {
-				if id.is_none() {
-					id = self
-						.sender
-						.bar(total, format!("{}: Checking out files", self.repo));
-				}
+				let bar = bar.get_or_insert_with(|| {
+					let bar = self.add_progress_bar(total as u64);
 
-				self.sender.set(id.unwrap(), current);
+					bar.set_message(format!("{}: Checking out files", self.repo));
+					bar
+				});
+
+				bar.set_position(current as u64);
 			}
 		});
 
@@ -110,5 +125,10 @@ impl Tracker {
 			.with_checkout(self.checkout_builder());
 
 		builder
+	}
+
+	fn add_progress_bar(&self, len: u64) -> ProgressBar {
+		self.multi_progress
+			.add(ProgressBar::new(len).with_style(progress_style().clone()))
 	}
 }

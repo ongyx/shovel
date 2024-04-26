@@ -1,34 +1,20 @@
-use std::thread;
-
 use eyre::WrapErr;
 use owo_colors::OwoColorize;
 
 use crate::commands::bucket::known;
-use crate::multi_progress;
 use crate::run::Run;
 use crate::tracker::Tracker;
 
 fn add_bucket(shovel: &mut shovel::Shovel, name: &str, url: &str) -> shovel::Result<()> {
-	thread::scope(|scope| {
-		let (tx, rx) = multi_progress::channel();
+	let multi_progress = indicatif::MultiProgress::new();
 
-		// Since updates on progress are sent over a channel, we run the bucket operation in a background thread.
-		let handle = scope.spawn(|| {
-			let tracker = Tracker::new(tx, name);
-			let mut builder = tracker.repo_builder();
+	let tracker = Tracker::new(multi_progress, name);
+	let mut builder = tracker.repo_builder();
 
-			// Add the bucket.
-			shovel.buckets.add(name, url, Some(&mut builder))?;
+	// Add the bucket.
+	shovel.buckets.add(name, url, Some(&mut builder))?;
 
-			Ok(())
-		});
-
-		// Show the progress.
-		rx.show();
-
-		// Wait for the background thread to join and return the error, if any.
-		handle.join().unwrap()
-	})
+	Ok(())
 }
 
 #[derive(clap::Args)]

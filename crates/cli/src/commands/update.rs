@@ -1,7 +1,6 @@
 use eyre::WrapErr;
 use rayon::prelude::*;
 
-use crate::multi_progress;
 use crate::run::Run;
 use crate::tracker;
 use crate::util;
@@ -60,20 +59,19 @@ impl Run for UpdateCommand {
 		let mut results: Option<Vec<_>> = None;
 
 		rayon::scope(|scope| {
-			let (tx, rx) = multi_progress::channel();
+			let multi_progress = indicatif::MultiProgress::new();
 
 			scope.spawn(|_| {
-				// Take ownership of `tx` to let it be used in the closure below.
+				// Take ownership of `multi_progress` to let it be used in the closure below.
 				// https://docs.rs/rayon/latest/rayon/fn.scope.html
-				let tx = tx;
+				let multi_progress = multi_progress;
 
 				let updated = buckets.par_bridge().map(
 					|bucket| -> eyre::Result<(git2::Oid, shovel::Bucket)> {
-						let tx = tx.clone();
-
 						let mut bucket = bucket?;
 
-						let tracker = tracker::Tracker::new(tx.clone(), bucket.name().as_str());
+						let tracker =
+							tracker::Tracker::new(multi_progress.clone(), bucket.name().as_str());
 
 						// Update the bucket and get the original HEAD.
 						let head = update_bucket(&mut bucket, &tracker)?;
@@ -84,9 +82,6 @@ impl Run for UpdateCommand {
 
 				results = Some(updated.collect());
 			});
-
-			// Show the progress while the buckets are updating.
-			rx.show();
 		});
 
 		// SAFETY: results will not be None after the scope closes.
