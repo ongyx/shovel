@@ -19,19 +19,15 @@ fn progress_style() -> &'static ProgressStyle {
 #[derive(Clone)]
 pub struct Tracker {
 	multi_progress: MultiProgress,
-	repo: String,
 }
 
 impl Tracker {
-	pub fn new(multi_progress: MultiProgress, repo: &str) -> Self {
-		Self {
-			multi_progress,
-			repo: repo.to_owned(),
-		}
+	pub fn new(multi_progress: MultiProgress) -> Self {
+		Self { multi_progress }
 	}
 
 	/// Returns a set of remote callbacks that send updates when invoked.
-	pub fn remote_callbacks(&self) -> RemoteCallbacks<'_> {
+	pub fn remote_callbacks(&self, repo: String) -> RemoteCallbacks<'_> {
 		let mut callbacks = RemoteCallbacks::new();
 
 		let mut recv_bar = None;
@@ -47,7 +43,7 @@ impl Tracker {
 				let recv_bar = recv_bar.get_or_insert_with(|| {
 					let bar = self.add_progress_bar(total);
 
-					bar.set_message(format!("{}: Receiving objects", self.repo));
+					bar.set_message(format!("{repo}: Receiving objects"));
 					bar
 				});
 
@@ -59,7 +55,7 @@ impl Tracker {
 				let index_bar = index_bar.get_or_insert_with(|| {
 					let bar = self.add_progress_bar(total);
 
-					bar.set_message(format!("{}: Indexing objects", self.repo));
+					bar.set_message(format!("{repo}: Indexing objects"));
 					bar
 				});
 
@@ -72,7 +68,7 @@ impl Tracker {
 				let delta_bar = delta_bar.get_or_insert_with(|| {
 					let bar = self.add_progress_bar(total_deltas);
 
-					bar.set_message(format!("{}: Resolving deltas", self.repo));
+					bar.set_message(format!("{repo}: Resolving deltas"));
 					bar
 				});
 
@@ -86,16 +82,16 @@ impl Tracker {
 	}
 
 	/// Returns a set of fetch options that wraps `Self::remote_callbacks`.
-	pub fn fetch_options(&self) -> FetchOptions<'_> {
+	pub fn fetch_options(&self, repo: String) -> FetchOptions<'_> {
 		let mut fetch = FetchOptions::new();
 
-		fetch.remote_callbacks(self.remote_callbacks());
+		fetch.remote_callbacks(self.remote_callbacks(repo));
 
 		fetch
 	}
 
 	/// Returns a checkout builder with a callback that sends updates when invoked.
-	pub fn checkout_builder(&self) -> CheckoutBuilder<'_> {
+	pub fn checkout_builder(&self, repo: String) -> CheckoutBuilder<'_> {
 		let mut checkout = CheckoutBuilder::new();
 
 		let mut bar = None;
@@ -106,7 +102,7 @@ impl Tracker {
 				let bar = bar.get_or_insert_with(|| {
 					let bar = self.add_progress_bar(total as u64);
 
-					bar.set_message(format!("{}: Checking out files", self.repo));
+					bar.set_message(format!("{repo}: Checking out files"));
 					bar
 				});
 
@@ -118,11 +114,11 @@ impl Tracker {
 	}
 
 	/// Returns a repository builder with both remote and checkout callbacks.
-	pub fn repo_builder(&self) -> RepoBuilder<'_> {
+	pub fn repo_builder(&self, repo: String) -> RepoBuilder<'_> {
 		let mut builder = RepoBuilder::new();
 		builder
-			.fetch_options(self.fetch_options())
-			.with_checkout(self.checkout_builder());
+			.fetch_options(self.fetch_options(repo.clone()))
+			.with_checkout(self.checkout_builder(repo));
 
 		builder
 	}

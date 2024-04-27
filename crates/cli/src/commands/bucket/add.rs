@@ -8,8 +8,8 @@ use crate::tracker::Tracker;
 fn add_bucket(shovel: &mut shovel::Shovel, name: &str, url: &str) -> shovel::Result<()> {
 	let multi_progress = indicatif::MultiProgress::new();
 
-	let tracker = Tracker::new(multi_progress, name);
-	let mut builder = tracker.repo_builder();
+	let tracker = Tracker::new(multi_progress);
+	let mut builder = tracker.repo_builder(name.to_owned());
 
 	// Add the bucket.
 	shovel.buckets.add(name, url, Some(&mut builder))?;

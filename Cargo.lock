@@ -1823,6 +1823,7 @@ dependencies = [
  "git2",
  "home",
  "phf",
+ "rayon",
  "regex",
  "reqwest 0.12.2",
  "serde",

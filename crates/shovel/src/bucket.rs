@@ -147,7 +147,7 @@ impl Bucket {
 		Ok(origin)
 	}
 
-	/// Returns the last commit in the bucket.
+	/// Returns the HEAD commit of the bucket.
 	///
 	/// # Errors
 	///

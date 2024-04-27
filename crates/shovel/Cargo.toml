@@ -16,6 +16,7 @@ futures-util.workspace = true
 git2.workspace = true
 home.workspace = true
 phf.workspace = true
+rayon.workspace = true
 regex.workspace = true
 reqwest.workspace = true
 serde.workspace = true
