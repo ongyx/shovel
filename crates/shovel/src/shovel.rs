@@ -1,4 +1,6 @@
 use std::fs;
+use std::io;
+use std::io::prelude::*;
 use std::vec;
 
 use git2::build::CheckoutBuilder;
@@ -68,6 +70,43 @@ impl Shovel {
 			persist: Persist::new(persist_dir),
 			config,
 		})
+	}
+
+	/// Copies the contents of a manifest to a writer specified by `options`.
+	/// If the manifest exists and was copied, `Ok(true)` is returned, otherwise `Ok(false)`.
+	///
+	/// # Arguments
+	///
+	/// * `options` - The cat options.
+	///
+	/// # Errors
+	///
+	/// [`Error::Bucket`] is returned if the manifest search failed.
+	///
+	/// [`Error::Io`] is returned if the manifest file cannot be opened or copied to the writer.
+	///
+	/// [`Error::Bucket`]: crate::error::Error::Bucket
+	/// [`Error::Io`]: crate::error::Error::Io
+	pub fn cat<W: Write>(&self, options: &mut CatOptions<W>) -> Result<bool> {
+		let mut search = self.buckets.search_all(
+			|bucket| {
+				let name = bucket.name();
+
+				options.bucket.is_none() || Some(name.as_str()) == options.bucket
+			},
+			|manifest| manifest == options.manifest,
+		)?;
+
+		if let Some((bucket, item)) = search.next() {
+			let path = bucket.manifest_path(&item.name);
+			let mut file = fs::File::open(path)?;
+
+			io::copy(&mut file, &mut options.writer)?;
+
+			Ok(true)
+		} else {
+			Ok(false)
+		}
 	}
 
 	/// Updates all buckets by pulling new changes.
@@ -175,5 +214,36 @@ impl Iterator for Updates {
 
 	fn next(&mut self) -> Option<Self::Item> {
 		self.inner.next()
+	}
+}
+
+/// Options for copying a manifest's content. See [`cat`].
+///
+/// [`cat`]: crate::shovel::Shovel::cat
+pub struct CatOptions<'a, W: Write> {
+	manifest: &'a str,
+	bucket: Option<&'a str>,
+	writer: W,
+}
+
+impl<'a, W: Write> CatOptions<'a, W> {
+	/// Creates a new set of cat options.
+	///
+	/// # Arguments
+	///
+	/// * `manifest` - The manifest to read.
+	/// * `writer` - The writer to write the manifest into.
+	pub fn new(manifest: &'a str, writer: W) -> Self {
+		Self {
+			manifest,
+			bucket: None,
+			writer,
+		}
+	}
+
+	/// Sets the specific bucket to search in for the app.
+	pub fn bucket(&mut self, bucket: &'a str) -> &mut Self {
+		self.bucket = Some(bucket);
+		self
 	}
 }

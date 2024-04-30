@@ -27,6 +27,7 @@ pub use error::Error;
 pub use error::Result;
 pub use hook::Hook;
 pub use manifest::Manifest;
+pub use shovel::CatOptions;
 pub use shovel::Shovel;
 pub use shovel::UpdateOptions;
 pub use timestamp::Timestamp;

@@ -1,3 +1,4 @@
+use std::cell::OnceCell;
 use std::sync::OnceLock;
 
 use git2::build::CheckoutBuilder;
@@ -30,9 +31,9 @@ impl Tracker {
 	pub fn remote_callbacks(&self, repo: String) -> RemoteCallbacks<'_> {
 		let mut callbacks = RemoteCallbacks::new();
 
-		let mut recv_bar = None;
-		let mut index_bar = None;
-		let mut delta_bar = None;
+		let recv_bar = OnceCell::new();
+		let index_bar = OnceCell::new();
+		let delta_bar = OnceCell::new();
 
 		// Register a callback for receiving remote objects.
 		callbacks.transfer_progress(move |stats| {
@@ -40,7 +41,7 @@ impl Tracker {
 
 			let received = stats.received_objects() as u64;
 			if received > 0 {
-				let recv_bar = recv_bar.get_or_insert_with(|| {
+				let recv_bar = recv_bar.get_or_init(|| {
 					let bar = self.add_progress_bar(total);
 
 					bar.set_message(format!("{repo}: Receiving objects"));
@@ -52,7 +53,7 @@ impl Tracker {
 
 			let indexed = stats.indexed_objects() as u64;
 			if indexed > 0 {
-				let index_bar = index_bar.get_or_insert_with(|| {
+				let index_bar = index_bar.get_or_init(|| {
 					let bar = self.add_progress_bar(total);
 
 					bar.set_message(format!("{repo}: Indexing objects"));
@@ -65,7 +66,7 @@ impl Tracker {
 			let deltas = stats.indexed_deltas() as u64;
 			let total_deltas = stats.total_deltas() as u64;
 			if deltas > 0 {
-				let delta_bar = delta_bar.get_or_insert_with(|| {
+				let delta_bar = delta_bar.get_or_init(|| {
 					let bar = self.add_progress_bar(total_deltas);
 
 					bar.set_message(format!("{repo}: Resolving deltas"));
@@ -94,12 +95,12 @@ impl Tracker {
 	pub fn checkout_builder(&self, repo: String) -> CheckoutBuilder<'_> {
 		let mut checkout = CheckoutBuilder::new();
 
-		let mut bar = None;
+		let bar = OnceCell::new();
 
 		// Register a callback for checking out objects.
 		checkout.progress(move |_, current, total| {
 			if current > 0 {
-				let bar = bar.get_or_insert_with(|| {
+				let bar = bar.get_or_init(|| {
 					let bar = self.add_progress_bar(total as u64);
 
 					bar.set_message(format!("{repo}: Checking out files"));

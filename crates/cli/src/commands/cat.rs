@@ -1,38 +1,28 @@
-use std::fs;
-use std::path::PathBuf;
+use std::io;
 
 use crate::run::Run;
 use crate::util;
 
 #[derive(clap::Args)]
 pub struct CatCommand {
-	/// The app's name. To specify a bucket, use the syntax `bucket/app`.
-	app: String,
-}
-
-impl CatCommand {
-	fn path(&self, shovel: &mut shovel::Shovel) -> eyre::Result<PathBuf> {
-		let (bucket_name, manifest_name) = util::parse_app(&self.app);
-
-		let mut search = shovel.buckets.search_all(
-			|bucket| bucket_name.is_empty() || (bucket.name() == bucket_name),
-			|manifest| manifest == manifest_name,
-		)?;
-
-		let (bucket, item) = search
-			.next()
-			.ok_or_else(|| eyre::eyre!("Search results are empty"))?;
-
-		Ok(bucket.manifest_path(&item.name))
-	}
+	/// The manifest's name. To specify a bucket, use the syntax `bucket/manifest`.
+	manifest: String,
 }
 
 impl Run for CatCommand {
 	fn run(&self, shovel: &mut shovel::Shovel) -> eyre::Result<()> {
-		let path = self.path(shovel)?;
+		let (bucket_name, manifest_name) = util::parse_app(&self.manifest);
 
-		print!("{}", fs::read_to_string(path)?);
+		let mut opts = shovel::CatOptions::new(manifest_name, io::stdout());
 
-		Ok(())
+		if !bucket_name.is_empty() {
+			opts.bucket(bucket_name);
+		}
+
+		if shovel.cat(&mut opts)? {
+			Ok(())
+		} else {
+			Err(eyre::eyre!("Manifest not found"))
+		}
 	}
 }
