@@ -1,5 +1,9 @@
 use eyre::WrapErr;
-use shovel::bucket;
+
+use shovel::bucket::Bucket;
+use shovel::bucket::Name;
+use shovel::bucket::Predicate;
+use shovel::bucket::SearchItem;
 
 use crate::run::Run;
 use crate::util;
@@ -14,7 +18,7 @@ struct SearchInfo {
 }
 
 impl SearchInfo {
-	fn new(bucket: &bucket::Bucket, item: bucket::SearchItem) -> shovel::Result<Self> {
+	fn new(bucket: &Bucket, item: SearchItem) -> shovel::Result<Self> {
 		let manifest = item.manifest?;
 		let arch = manifest.compatible();
 
@@ -41,16 +45,18 @@ pub struct SearchCommand {
 
 impl Run for SearchCommand {
 	fn run(&self, shovel: &mut shovel::Shovel) -> eyre::Result<()> {
-		let (bucket_name, manifest_name) = util::parse_app(&self.query);
+		let name = Name::new(self.query.clone());
 
-		let regex = regex::Regex::new(manifest_name).wrap_err("Invalid pattern")?;
+		let regex = regex::Regex::new(name.manifest()).wrap_err("Invalid pattern")?;
+
+		let predicate = Predicate::new(
+			|b| name.bucket().map_or(true, |nb| b.name() == nb),
+			|m| regex.is_match(m),
+		);
 
 		let apps: shovel::Result<Vec<_>> = shovel
 			.buckets
-			.search_all(
-				|bucket| bucket_name.is_empty() || bucket.name() == bucket_name,
-				|manifest_name| regex.is_match(manifest_name),
-			)
+			.search_all(&predicate)
 			.wrap_err("Search failed")?
 			.map(|(bucket, item)| SearchInfo::new(&bucket, item))
 			.collect();

@@ -1,6 +1,7 @@
 use std::iter;
 
-use shovel::app;
+use shovel::app::Error as AppError;
+use shovel::bucket::Name;
 
 use crate::run::Run;
 use crate::util;
@@ -24,14 +25,14 @@ struct Info {
 }
 
 impl Info {
-	fn new(shovel: &mut shovel::Shovel, name: &str) -> shovel::Result<Self> {
+	fn new(shovel: &mut shovel::Shovel, name: &Name) -> shovel::Result<Self> {
 		let (bucket, item) = shovel.buckets.manifest(name)?;
 		let manifest = item.manifest?;
 		let arch = manifest.compatible();
 
 		let license = manifest.license.to_string();
 
-		let commit = bucket.manifest_commit(name)?;
+		let commit = bucket.manifest_commit(name.manifest())?;
 
 		let (updated_at, updated_by) = match commit {
 			Some(commit) => {
@@ -46,12 +47,12 @@ impl Info {
 			),
 		};
 
-		let app = shovel.apps.open_current(name);
+		let app = shovel.apps.open_current(name.manifest());
 
 		let installed = match app {
 			Ok(app) => Ok(app.manifest()?.version),
 			// If the app is not found, do not propagate the error.
-			Err(app::Error::NotFound { .. }) => Ok("(not installed)".to_owned()),
+			Err(AppError::NotFound { .. }) => Ok("(not installed)".to_owned()),
 			Err(err) => Err(err),
 		}?;
 
@@ -70,7 +71,7 @@ impl Info {
 			.unwrap_or_default();
 
 		Ok(Self {
-			name: name.to_owned(),
+			name: name.full().to_owned(),
 			description: manifest.description.unwrap_or_default(),
 			version: manifest.version,
 			bucket: bucket.name(),
@@ -93,7 +94,8 @@ pub struct InfoCommand {
 
 impl Run for InfoCommand {
 	fn run(&self, shovel: &mut shovel::Shovel) -> eyre::Result<()> {
-		let info = Info::new(shovel, &self.app)?;
+		let name = Name::new(self.app.clone());
+		let info = Info::new(shovel, &name)?;
 
 		let table = util::tableify(iter::once(info), true);
 

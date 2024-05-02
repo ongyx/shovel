@@ -5,8 +5,9 @@ use std::path::PathBuf;
 
 use git2::build;
 
-use crate::bucket::error::Error;
-use crate::bucket::error::Result;
+use crate::bucket::Criteria;
+use crate::bucket::Error;
+use crate::bucket::Result;
 use crate::json;
 use crate::manifest::Manifest;
 use crate::util;
@@ -135,22 +136,19 @@ impl Bucket {
 		Commits::new(&self.repo, since)
 	}
 
-	/// Parses and yields each manifest in the bucket as (name, manifest) where predicate(name) returns true.
+	/// Parses and yields each manifest in the bucket as (name, manifest) where the criteria is satisfied.
 	///
 	/// # Arguments
 	///
-	/// `predicate` - A predicate function that determines if a manifest should be yielded.
+	/// `criteria` - The criteria that determines if a manifest should be yielded.
 	///
 	/// # Errors
 	///
 	/// If the bucket directory cannot be read, [`Error::Io`] is returned.
-	pub fn search<P>(&self, predicate: P) -> Result<Search<P>>
-	where
-		P: Fn(&str) -> bool,
-	{
+	pub fn search<C: Criteria>(&self, criteria: C) -> Result<Search<C>> {
 		let dir = self.dir().join("bucket");
 
-		Search::new(dir, predicate)
+		Search::new(dir, criteria)
 	}
 
 	/// Parses and yields each manifest in the bucket as (name, manifest).
@@ -160,7 +158,7 @@ impl Bucket {
 	///
 	/// If the bucket directory cannot be read, [`Error::Io`] is returned.
 	pub fn manifests(&self) -> Result<Manifests> {
-		self.search(|_| true)
+		self.search(())
 	}
 
 	/// Returns the path to an manifest.
@@ -389,33 +387,24 @@ pub struct SearchItem {
 	pub manifest: Result<Manifest>,
 }
 
-/// An iterator over manifests in a bucket, filtered by a predicate of type `P`. Created by `Buckets::search`.
-pub struct Search<P>
-where
-	P: Fn(&str) -> bool,
-{
+/// An iterator over manifests in a bucket, filtered by criteria of type `C`. Created by `Buckets::search`.
+pub struct Search<C: Criteria> {
 	entries: fs::ReadDir,
-	predicate: P,
+	criteria: C,
 }
 
-impl<P> Search<P>
-where
-	P: Fn(&str) -> bool,
-{
-	fn new<PATH>(dir: PATH, predicate: P) -> Result<Self>
+impl<C: Criteria> Search<C> {
+	fn new<P>(dir: P, criteria: C) -> Result<Self>
 	where
-		PATH: AsRef<Path>,
+		P: AsRef<Path>,
 	{
 		let entries = fs::read_dir(dir)?;
 
-		Ok(Self { entries, predicate })
+		Ok(Self { entries, criteria })
 	}
 }
 
-impl<P> Iterator for Search<P>
-where
-	P: Fn(&str) -> bool,
-{
+impl<C: Criteria> Iterator for Search<C> {
 	type Item = SearchItem;
 
 	fn next(&mut self) -> Option<Self::Item> {
@@ -433,7 +422,7 @@ where
 			let name = util::osstr_to_string(path.file_stem().unwrap());
 
 			// If the predicate does not match, the manifest is skipped.
-			if !(self.predicate)(&name) {
+			if !self.criteria.filter_manifest(&name) {
 				return None;
 			}
 
@@ -446,7 +435,7 @@ where
 }
 
 /// An iterator over all manifests in a bucket.
-pub type Manifests = Search<fn(&str) -> bool>;
+pub type Manifests = Search<()>;
 
 #[cfg(test)]
 mod tests {

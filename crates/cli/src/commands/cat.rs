@@ -1,7 +1,8 @@
 use std::io;
 
+use shovel::bucket::Name;
+
 use crate::run::Run;
-use crate::util;
 
 #[derive(clap::Args)]
 pub struct CatCommand {
@@ -11,18 +12,12 @@ pub struct CatCommand {
 
 impl Run for CatCommand {
 	fn run(&self, shovel: &mut shovel::Shovel) -> eyre::Result<()> {
-		let (bucket_name, manifest_name) = util::parse_app(&self.manifest);
+		let name = Name::new(self.manifest.clone());
 
-		let mut opts = shovel::CatOptions::new(manifest_name, io::stdout());
+		let mut opts = shovel::CatOptions::new(name, io::stdout());
 
-		if !bucket_name.is_empty() {
-			opts.bucket(bucket_name);
-		}
+		shovel.cat(&mut opts)?;
 
-		if shovel.cat(&mut opts)? {
-			Ok(())
-		} else {
-			Err(eyre::eyre!("Manifest not found"))
-		}
+		Ok(())
 	}
 }

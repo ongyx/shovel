@@ -12,10 +12,13 @@ use git2::build;
 
 use crate::bucket::Bucket;
 use crate::bucket::Error;
+use crate::bucket::Name;
 use crate::bucket::Result;
 use crate::bucket::Search;
 use crate::bucket::SearchItem;
 use crate::util;
+
+use crate::bucket::Criteria;
 
 /// A bucket manager.
 ///
@@ -48,6 +51,8 @@ impl Buckets {
 	/// # Errors
 	///
 	/// If the directory containing the buckets cannot be read, [`Error::Io`] is returned.
+	///
+	/// [`Error::Io`]: crate::bucket::Error::Io
 	pub fn iter(&self) -> Result<Iter> {
 		Iter::new(self.dir.clone())
 	}
@@ -66,7 +71,9 @@ impl Buckets {
 	///
 	/// # Errors
 	///
-	/// If the bucket does not exist, `Error::NotFound` is returned.
+	/// If the bucket does not exist, [`Error::NotFound`] is returned.
+	///
+	/// [`Error::NotFound`]: crate::bucket::Error::NotFound
 	pub fn open(&self, name: &str) -> Result<Bucket> {
 		let dir = self.path(name);
 
@@ -88,7 +95,9 @@ impl Buckets {
 	///
 	/// # Errors
 	///
-	/// If the bucket name already exists, `Error::BucketExists` is returned.
+	/// If the bucket name already exists, [`Error::BucketExists`] is returned.
+	///
+	/// [`Error::BucketExists`]: crate::bucket::Error::BucketExists
 	pub fn add(
 		&self,
 		name: &str,
@@ -114,7 +123,9 @@ impl Buckets {
 	///
 	/// # Errors
 	///
-	/// If the bucket does not exist, `Error::NotFound` is returned.
+	/// If the bucket does not exist, [`Error::NotFound`] is returned.
+	///
+	/// [`Error::NotFound`]: crate::bucket::Error::NotFound
 	pub fn remove(&self, name: &str) -> Result<()> {
 		let dir = self.path(name);
 
@@ -137,16 +148,12 @@ impl Buckets {
 	/// # Errors
 	///
 	/// If the directory containing the buckets or any bucket directory cannot be read, [`Error::Io`] is returned.
-	pub fn search_all<F, P>(&self, filter: F, predicate: P) -> Result<SearchAll<P>>
-	where
-		F: Fn(&Bucket) -> bool,
-		P: Fn(&str) -> bool + Copy,
-	{
+	///
+	/// [`Error::Io`]: crate::bucket::Error::Io
+	pub fn search_all<C: Criteria>(&self, criteria: &C) -> Result<SearchAll<C>> {
 		let buckets: Result<Vec<_>> = self.iter()?.collect();
 
-		let buckets = buckets?.into_iter().filter(filter);
-
-		SearchAll::new(buckets, predicate)
+		SearchAll::new(buckets?, criteria)
 	}
 
 	/// Parses and yields each manifest in all buckets.
@@ -157,8 +164,10 @@ impl Buckets {
 	/// # Errors
 	///
 	/// If the directory containing the buckets or any bucket directory cannot be read, [`Error::Io`] is returned.
+	///
+	/// [`Error::Io`]: crate::bucket::Error::Io
 	pub fn manifests(&self) -> Result<AllManifests> {
-		self.search_all(|_| true, |_| true)
+		self.search_all(&())
 	}
 
 	/// Parses and returns a single manifest in any bucket.
@@ -170,8 +179,13 @@ impl Buckets {
 	/// # Errors
 	///
 	/// If the directory containing the buckets or any bucket directory cannot be read, [`Error::Io`] is returned.
-	pub fn manifest(&self, name: &str) -> Result<(Rc<Bucket>, SearchItem)> {
-		let mut search = self.search_all(|_| true, |manifest_name| manifest_name == name)?;
+	///
+	/// If the manifest was not found, [`Error::ManifestNotFound`] is returned.
+	///
+	/// [`Error::Io`]: crate::bucket::Error::Io
+	/// [`Error::ManifestNotFound`]: crate::bucket::Error::ManifestNotFound
+	pub fn manifest(&self, name: &Name) -> Result<(Rc<Bucket>, SearchItem)> {
+		let mut search = self.search_all(name)?;
 
 		search.next().ok_or(Error::ManifestNotFound)
 	}
@@ -203,30 +217,23 @@ impl Iterator for Iter {
 	}
 }
 
-type SearchAllInner<P> = Zip<Repeat<Rc<Bucket>>, Search<P>>;
+type SearchAllInner<C> = Zip<Repeat<Rc<Bucket>>, Search<C>>;
 
-/// An iterator over manifests in all buckets, filtered by a predicate of type `P`. Created by `Buckets::search_all`.
-pub struct SearchAll<P>
-where
-	P: Fn(&str) -> bool + Copy,
-{
-	inner: Flatten<IntoIter<SearchAllInner<P>>>,
+/// An iterator over manifests in all buckets, filtered by criteria of type `C`. Created by `Buckets::search_all`.
+pub struct SearchAll<C: Criteria> {
+	inner: Flatten<IntoIter<SearchAllInner<C>>>,
 }
 
-impl<P> SearchAll<P>
-where
-	P: Fn(&str) -> bool + Copy,
-{
-	fn new<I>(buckets: I, predicate: P) -> Result<Self>
-	where
-		I: Iterator<Item = Bucket>,
-	{
+impl<C: Criteria> SearchAll<C> {
+	fn new(buckets: Vec<Bucket>, criteria: &C) -> Result<Self> {
 		let manifests: Result<Vec<_>> = buckets
+			.into_iter()
+			.filter(|bucket| criteria.clone().filter_bucket(bucket))
 			// Since each item has a handle to the bucket, the handle is wrapped in an Rc to avoid duplication.
-			.map(move |bucket| {
+			.map(|bucket| {
 				// Since each item has a handle to the bucket, the handle is wrapped in an Rc to avoid duplication.
 				let bucket = Rc::new(bucket);
-				let manifests = bucket.search(predicate)?;
+				let manifests = bucket.search(criteria.clone())?;
 
 				// Zip the bucket and its manifests together.
 				Ok(iter::repeat(bucket).zip(manifests))
@@ -239,10 +246,7 @@ where
 	}
 }
 
-impl<P> Iterator for SearchAll<P>
-where
-	P: Fn(&str) -> bool + Copy,
-{
+impl<C: Criteria> Iterator for SearchAll<C> {
 	type Item = (Rc<Bucket>, SearchItem);
 
 	fn next(&mut self) -> Option<Self::Item> {
@@ -251,7 +255,7 @@ where
 }
 
 /// An iterator over all manifests in all buckets.
-pub type AllManifests = SearchAll<fn(&str) -> bool>;
+pub type AllManifests = SearchAll<()>;
 
 #[cfg(test)]
 mod tests {
