@@ -71,7 +71,7 @@ impl Info {
 			.unwrap_or_default();
 
 		Ok(Self {
-			name: name.full().to_owned(),
+			name: name.manifest().to_owned(),
 			description: manifest.description.unwrap_or_default(),
 			version: manifest.version,
 			bucket: bucket.name(),

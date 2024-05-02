@@ -17,7 +17,7 @@ pub fn executable() -> &'static PathBuf {
 	EXECUTABLE.get_or_init(|| {
 		which::which_global("pwsh.exe")
 			.or_else(|_| which::which_global("powershell.exe"))
-			.expect("PowerShell v5.1 is installed by default on Windows")
+			.expect("PowerShell v5.1 should be installed by default on Windows")
 	})
 }
 
