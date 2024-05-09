@@ -1,24 +1,24 @@
 use std::fmt;
 use std::fs;
 use std::io;
-use std::io::prelude::*;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::OnceLock;
 
 use futures_util::future;
-use futures_util::StreamExt;
 use regex;
-use reqwest;
 use thiserror;
 
+use crate::download::Download;
+use crate::download::Error as DownloadError;
+use crate::download::Progress;
 use crate::util;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-	/// An error from reqwest.
+	/// An error from the downloader.
 	#[error("Failed to add URL to cache: {0}")]
-	Reqwest(#[from] reqwest::Error),
+	Download(#[from] DownloadError),
 
 	/// An IO error.
 	#[error("IO error: {0}")]
@@ -200,24 +200,19 @@ impl Cache {
 	///
 	/// # Arguments
 	///
-	/// * `client`: The HTTP client to use.
 	/// * `key`: The key to add.
-	/// * `progress`: A closure to track download progress for the key. Takes (key, current, total) where current and total are in bytes.
+	/// * `download`: The downloader to use.
 	///
 	/// # Errors
 	///
 	/// [`Error::Io`] is returned if the cached file cannot be read, created, or written to.
 	///
-	/// [`Error::Reqwest`] is returned if the URL cannot be downloaded.
-	pub async fn add<P>(
+	/// [`Error::Download`] is returned if the URL cannot be downloaded.
+	pub async fn add<P: Progress>(
 		&self,
-		client: reqwest::Client,
 		key: Key,
-		progress: Option<P>,
-	) -> Result<(bool, PathBuf)>
-	where
-		P: Fn(&Key, u64, u64),
-	{
+		download: &Download<P>,
+	) -> Result<(bool, PathBuf)> {
 		let path = self.path(&key);
 
 		if self.exists(&key)? {
@@ -225,28 +220,7 @@ impl Cache {
 			return Ok((true, path));
 		}
 
-		let resp = client.get(&key.url).send().await?;
-
-		let mut current = 0u64;
-		let total = resp.content_length();
-
-		let mut stream = resp.bytes_stream();
-
-		let mut file = fs::File::create(&path)?;
-
-		while let Some(chunk) = stream.next().await {
-			let chunk = chunk?;
-
-			file.write_all(&chunk)?;
-
-			current += chunk.len() as u64;
-
-			if let Some(total) = total {
-				if let Some(ref progress) = progress {
-					progress(&key, current, total);
-				}
-			}
-		}
+		download.download_to_path(&key.url, &path).await?;
 
 		Ok((false, path))
 	}
@@ -255,9 +229,8 @@ impl Cache {
 	///
 	/// # Arguments
 	///
-	/// * `client` - The HTTP client to use.
 	/// * `keys` - An iterator over keys to add.
-	/// * `progress`: A closure to track download progress for each key. Takes (key, current, total) where current and total are in bytes.
+	/// * `download`: The downloader to use.
 	///
 	/// # Errors
 	///
@@ -266,17 +239,14 @@ impl Cache {
 	/// [`add`]: Cache::add
 	pub async fn add_multiple<I, P>(
 		&self,
-		client: reqwest::Client,
 		keys: I,
-		progress: Option<P>,
+		download: &Download<P>,
 	) -> Result<Vec<(bool, PathBuf)>>
 	where
 		I: IntoIterator<Item = Key>,
-		P: Fn(&Key, u64, u64),
+		P: Progress,
 	{
-		let futures = keys
-			.into_iter()
-			.map(|k| self.add(client.clone(), k, progress.as_ref()));
+		let futures = keys.into_iter().map(|k| self.add(k, download));
 
 		let downloaded = future::try_join_all(futures).await?;
 

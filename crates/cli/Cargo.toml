@@ -1,6 +1,6 @@
 [package]
 name = "shovel-cli"
-version = "0.1.0"
+version = "0.1.1"
 description = "A package manager for Windows, based off of Scoop."
 
 authors.workspace = true

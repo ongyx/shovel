@@ -5,10 +5,10 @@ use std::path::PathBuf;
 use std::sync::OnceLock;
 
 use crate::config;
+use crate::config::Config;
 use crate::manifest::Arch;
+use crate::manifest::Manifest;
 use crate::util;
-use crate::Config;
-use crate::Manifest;
 
 use powershell;
 

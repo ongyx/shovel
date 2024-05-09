@@ -1,3 +1,5 @@
+use shovel::bucket;
+
 use crate::run::Run;
 use crate::util;
 
@@ -11,7 +13,7 @@ struct BucketInfo {
 }
 
 impl BucketInfo {
-	fn new(bucket: &shovel::Bucket) -> shovel::Result<Self> {
+	fn new(bucket: &bucket::Bucket) -> shovel::Result<Self> {
 		let name = bucket.name();
 		let source = bucket.url()?;
 		let commit = bucket.commit()?;

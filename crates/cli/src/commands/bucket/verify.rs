@@ -3,6 +3,7 @@ use std::sync::OnceLock;
 
 use eyre::WrapErr;
 use owo_colors::OwoColorize;
+use shovel::bucket;
 use shovel::json;
 
 use crate::run::Run;
@@ -46,7 +47,7 @@ pub struct VerifyCommand {
 }
 
 impl VerifyCommand {
-	fn validate(name: &str, bucket: &shovel::Bucket) -> eyre::Result<Verified> {
+	fn validate(name: &str, bucket: &bucket::Bucket) -> eyre::Result<Verified> {
 		use Verified::*;
 
 		let path = bucket.manifest_path(name);
@@ -70,7 +71,7 @@ impl VerifyCommand {
 
 	fn verify<'b>(
 		&'b self,
-		bucket: &'b shovel::Bucket,
+		bucket: &'b bucket::Bucket,
 	) -> eyre::Result<impl Iterator<Item = eyre::Result<Verified>> + 'b> {
 		use Verified::*;
 

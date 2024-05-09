@@ -15,7 +15,7 @@ struct ListInfo {
 }
 
 impl ListInfo {
-	fn new(name: &str, app: app::Result<shovel::App>) -> Self {
+	fn new(name: &str, app: app::Result<app::App>) -> Self {
 		// Obtain the app's info if it didn't error out.
 		let info = app.and_then(|app| {
 			let manifest = app.manifest()?;
